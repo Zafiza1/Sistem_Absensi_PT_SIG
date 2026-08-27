@@ -33,7 +33,7 @@ func main() {
 	}
 
 	log := logger.New(cfg.AppEnv, cfg.LogLevel)
-	log.Info("starting_server", slog.String("env", cfg.AppEnv), slog.String("port", cfg.AppPort))
+	log.Info("starting_server", slog.String("port", cfg.AppPort))
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
