@@ -13,6 +13,7 @@ COPY . .
 # CGO disabled -> fully static binary, no libc dependency in the final image.
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/server ./cmd/server
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/migrate ./cmd/migrate
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/seed ./cmd/seed
 
 # --- Runtime stage -------------------------------------------------------
 FROM alpine:3.20
@@ -24,6 +25,7 @@ WORKDIR /app
 
 COPY --from=builder /out/server ./server
 COPY --from=builder /out/migrate ./migrate
+COPY --from=builder /out/seed ./seed
 COPY migrations ./migrations
 
 USER app

@@ -14,10 +14,12 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
+	"github.com/suryaintigas/absensi-backend/internal/auth"
 	"github.com/suryaintigas/absensi-backend/internal/config"
 	"github.com/suryaintigas/absensi-backend/internal/database"
 	"github.com/suryaintigas/absensi-backend/internal/health"
 	"github.com/suryaintigas/absensi-backend/internal/middleware"
+	"github.com/suryaintigas/absensi-backend/pkg/jwt"
 	"github.com/suryaintigas/absensi-backend/pkg/logger"
 )
 
@@ -74,8 +76,25 @@ func main() {
 	healthHandler := health.NewHandler(pool)
 	router.GET("/health", healthHandler.Check)
 
-	// Future API route groups (auth, employees, attendance, ...) are
-	// registered here under router.Group("/api/v1") as each phase lands.
+	jwtManager := jwt.NewManager(cfg.JWTSecret)
+
+	authRepo := auth.NewPostgresRepository(pool)
+	authService := auth.NewService(authRepo, jwtManager, cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
+	authHandler := auth.NewHandler(authService)
+
+	v1 := router.Group("/api/v1")
+
+	authGroup := v1.Group("/auth")
+	authGroup.Use(middleware.RateLimit(10, time.Minute)) // brute-force guard on login/refresh
+	{
+		authGroup.POST("/login", authHandler.Login)
+		authGroup.POST("/refresh", authHandler.Refresh)
+		authGroup.POST("/logout", authHandler.Logout)
+		authGroup.GET("/me", middleware.AuthRequired(jwtManager), authHandler.Me)
+	}
+
+	// Future route groups (employees, attendance, shifts, devices, ...) are
+	// registered here under v1 as each phase lands.
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.AppPort,

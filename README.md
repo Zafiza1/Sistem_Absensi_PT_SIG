@@ -79,7 +79,7 @@ phases working before the next one starts (see the full spec for detail).
 | Phase | Scope | Status |
 |---|---|---|
 | 1 | Foundation — repo structure, Gin, PostgreSQL, Docker, migrations, config, logging, health check | ✅ Done |
-| 2 | Authentication — users, login, JWT + refresh token, RBAC middleware | ⏳ Next |
+| 2 | Authentication — users, login, JWT + refresh token, RBAC middleware | ✅ Done |
 | 3 | Master data — employees, departments, positions, shifts, schedules, devices | ⏳ Planned |
 | 4 | Attendance — check-in/out, late calculation, working duration, history | ⏳ Planned |
 | 5 | Flutter tablet app — camera, face recognition, liveness, offline + sync | ⏳ Planned |
@@ -174,9 +174,13 @@ go run ./cmd/server
 
 Base path: `/api/v1` (versioned from the start). Currently implemented:
 
-| Method | Path | Description |
-|---|---|---|
-| GET | `/health` | Liveness + database connectivity check |
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | `/health` | — | Liveness + database connectivity check |
+| POST | `/api/v1/auth/login` | — | Email + password → access + refresh token |
+| POST | `/api/v1/auth/refresh` | — | Rotates a valid refresh token for a new pair |
+| POST | `/api/v1/auth/logout` | — | Revokes a refresh token |
+| GET | `/api/v1/auth/me` | Bearer | Current authenticated user's profile |
 
 Every response uses the same envelope:
 
@@ -185,8 +189,41 @@ Every response uses the same envelope:
 { "success": false, "message": "...", "errors": { ... } }
 ```
 
-Auth, employee, attendance, device, and report endpoints are added as their
+Employee, attendance, device, and report endpoints are added as their
 respective phases land — see [Development Phases](#development-phases).
+
+### Authentication
+
+- Access tokens are short-lived JWTs (HS256, default 15m, `ACCESS_TOKEN_TTL`)
+  sent as `Authorization: Bearer <token>`.
+- Refresh tokens are opaque random strings (not JWTs) tracked server-side by
+  SHA-256 hash in `refresh_tokens`, default 7 days (`REFRESH_TOKEN_TTL`).
+  Every `/auth/refresh` call **rotates** the token — the presented one is
+  revoked and a new one issued — so a leaked-but-unused refresh token can be
+  replayed at most once before the legitimate client's next refresh locks
+  the attacker out.
+- `/auth/login` and `/auth/refresh` are rate-limited per client IP
+  (in-process, no Redis — see `internal/middleware/ratelimit.go`) as a basic
+  brute-force guard.
+- Roles: `SUPER_ADMIN`, `ADMIN`, `HR`, `MANAGEMENT` (`pkg/rbac`). Protect a
+  route with `middleware.AuthRequired(jwtManager)` followed by
+  `middleware.RequireRole(rbac.Admin, rbac.HR, ...)`.
+
+### Seeding the first admin account
+
+There is no public registration endpoint — dashboard accounts are created by
+an admin (Phase 3+) or bootstrapped with:
+
+```bash
+cd backend
+SEED_ADMIN_EMAIL=admin@suryaintigas.com SEED_ADMIN_PASSWORD='ChangeMe123!' go run ./cmd/seed
+# or, against the Docker stack:
+docker compose exec -e SEED_ADMIN_EMAIL=admin@suryaintigas.com -e SEED_ADMIN_PASSWORD='ChangeMe123!' backend ./seed
+```
+
+Re-running it just resets that account's password (idempotent, matched on
+email). Omitted values fall back to a logged development default — refused
+outright when `APP_ENV=production`.
 
 ## Testing
 
@@ -194,7 +231,7 @@ respective phases land — see [Development Phases](#development-phases).
 cd backend
 go build ./...   # compiles everything
 go vet ./...     # static analysis
-go test ./...    # unit tests (added from Phase 2 onward, alongside real logic)
+go test ./...    # unit tests — auth service + JWT covered from Phase 2 onward
 ```
 
 ## Docker Deployment
