@@ -1,0 +1,47 @@
+# Development/deployment composition for the Absensi Digital PT Surya Inti
+# Gas system.
+#
+# Phase 1 brings up `postgres` + `backend` only. `web` (Next.js) and `nginx`
+# are added here in Phase 6 / Phase 8 once those pieces of the system exist —
+# see README.md's Development Phases section for status.
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-absensi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-absensi}
+      POSTGRES_DB: ${POSTGRES_DB:-absensi_db}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-absensi} -d ${POSTGRES_DB:-absensi_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      APP_PORT: ${APP_PORT:-8080}
+      DATABASE_URL: ${DATABASE_URL:-postgres://absensi:absensi@postgres:5432/absensi_db?sslmode=disable}
+      JWT_SECRET: ${JWT_SECRET:-dev-only-insecure-secret-change-me}
+      ACCESS_TOKEN_TTL: ${ACCESS_TOKEN_TTL:-15m}
+      REFRESH_TOKEN_TTL: ${REFRESH_TOKEN_TTL:-168h}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
+      AUTO_MIGRATE: ${AUTO_MIGRATE:-true}
+    ports:
+      - "${APP_PORT:-8080}:8080"
+
+volumes:
+  postgres_data:
