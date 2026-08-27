@@ -21,6 +21,7 @@ import (
 	"github.com/suryaintigas/absensi-backend/internal/department"
 	"github.com/suryaintigas/absensi-backend/internal/device"
 	"github.com/suryaintigas/absensi-backend/internal/employee"
+	"github.com/suryaintigas/absensi-backend/internal/faceprofile"
 	"github.com/suryaintigas/absensi-backend/internal/health"
 	"github.com/suryaintigas/absensi-backend/internal/middleware"
 	"github.com/suryaintigas/absensi-backend/internal/position"
@@ -177,6 +178,18 @@ func main() {
 		deviceGroup.PUT("/:id", adminOnly, deviceHandler.Update)
 		deviceGroup.DELETE("/:id", adminOnly, deviceHandler.Delete)
 	}
+	// Public: the tablet verifies itself by device_code, not a JWT — see
+	// VerifyByCode's doc comment. Phase 5's app calls this on launch.
+	v1.GET("/devices/verify/:code", middleware.RateLimit(30, time.Minute), deviceHandler.VerifyByCode)
+
+	faceProfileHandler := faceprofile.NewHandler(faceprofile.NewService(faceprofile.NewPostgresRepository(pool)), deviceRepo)
+	// Enrollment is an HR/Admin action on the tablet's camera (JWT-gated,
+	// same roles as managing the employee record itself).
+	employeeGroup.PUT("/:id/face-profile", adminOrHR, faceProfileHandler.Enroll)
+	// Sync is public/device-gated like attendance, so every registered
+	// tablet can download every employee's feature vector and recognize
+	// faces entirely on-device, including while offline.
+	v1.GET("/face-profiles/sync", middleware.RateLimit(10, time.Minute), faceProfileHandler.Sync)
 
 	// --- Phase 4: attendance ------------------------------------------------
 	// Check-in/check-out are deliberately NOT behind AuthRequired: the

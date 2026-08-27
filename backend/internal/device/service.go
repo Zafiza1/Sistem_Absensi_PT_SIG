@@ -45,6 +45,12 @@ func (s *Service) Get(ctx context.Context, id uuid.UUID) (*Device, error) {
 	return s.repo.FindByID(ctx, id)
 }
 
+// GetByCode backs the tablet's device-verification flow (Phase 5): the app
+// looks itself up by its assigned device_code, not its internal UUID.
+func (s *Service) GetByCode(ctx context.Context, code string) (*Device, error) {
+	return s.repo.FindByCode(ctx, code)
+}
+
 func (s *Service) List(ctx context.Context, p pagination.Params) ([]Device, int64, error) {
 	return s.repo.List(ctx, p)
 }

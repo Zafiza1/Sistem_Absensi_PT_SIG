@@ -77,6 +77,31 @@ func (h *Handler) List(c *gin.Context) {
 	})
 }
 
+// VerifyByCode is public (no JWT): the tablet calls it on launch, and
+// periodically thereafter, to confirm it is still a registered, active
+// device before showing the attendance screen — per the spec, an
+// unregistered or deactivated tablet must never be allowed to proceed. It
+// deliberately returns only non-sensitive display fields.
+func (h *Handler) VerifyByCode(c *gin.Context) {
+	code := c.Param("code")
+
+	d, err := h.service.GetByCode(c.Request.Context(), code)
+	if err != nil {
+		writeError(c, err)
+		return
+	}
+	if d.Status != StatusActive {
+		response.Fail(c, http.StatusForbidden, "Perangkat tidak aktif. Hubungi administrator.", nil)
+		return
+	}
+
+	response.OK(c, http.StatusOK, "Perangkat terverifikasi", gin.H{
+		"device_name": d.DeviceName,
+		"location":    d.Location,
+		"status":      d.Status,
+	})
+}
+
 func (h *Handler) Get(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
