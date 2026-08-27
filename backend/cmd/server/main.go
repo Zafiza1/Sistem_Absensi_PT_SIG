@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
+	"github.com/suryaintigas/absensi-backend/internal/attendance"
 	"github.com/suryaintigas/absensi-backend/internal/auth"
 	"github.com/suryaintigas/absensi-backend/internal/config"
 	"github.com/suryaintigas/absensi-backend/internal/database"
@@ -130,7 +131,11 @@ func main() {
 		posGroup.DELETE("/:id", adminOnly, posHandler.Delete)
 	}
 
-	shiftHandler := shift.NewHandler(shift.NewService(shift.NewPostgresRepository(pool)))
+	// Repositories are named so Phase 4's attendance service can reuse the
+	// same instances to re-validate employee/device/shift/schedule,
+	// instead of re-querying through those modules' own services.
+	shiftRepo := shift.NewPostgresRepository(pool)
+	shiftHandler := shift.NewHandler(shift.NewService(shiftRepo))
 	shiftGroup := authed.Group("/shifts")
 	{
 		shiftGroup.GET("", shiftHandler.List)
@@ -140,7 +145,8 @@ func main() {
 		shiftGroup.DELETE("/:id", adminOrHR, shiftHandler.Delete)
 	}
 
-	employeeHandler := employee.NewHandler(employee.NewService(employee.NewPostgresRepository(pool)))
+	employeeRepo := employee.NewPostgresRepository(pool)
+	employeeHandler := employee.NewHandler(employee.NewService(employeeRepo))
 	employeeGroup := authed.Group("/employees")
 	{
 		employeeGroup.GET("", employeeHandler.List)
@@ -150,7 +156,8 @@ func main() {
 		employeeGroup.DELETE("/:id", adminOrHR, employeeHandler.Delete)
 	}
 
-	scheduleHandler := schedule.NewHandler(schedule.NewService(schedule.NewPostgresRepository(pool)))
+	scheduleRepo := schedule.NewPostgresRepository(pool)
+	scheduleHandler := schedule.NewHandler(schedule.NewService(scheduleRepo))
 	scheduleGroup := authed.Group("/schedules")
 	{
 		scheduleGroup.GET("", scheduleHandler.List)
@@ -160,7 +167,8 @@ func main() {
 		scheduleGroup.DELETE("/:id", adminOrHR, scheduleHandler.Delete)
 	}
 
-	deviceHandler := device.NewHandler(device.NewService(device.NewPostgresRepository(pool)))
+	deviceRepo := device.NewPostgresRepository(pool)
+	deviceHandler := device.NewHandler(device.NewService(deviceRepo))
 	deviceGroup := authed.Group("/devices")
 	{
 		deviceGroup.GET("", deviceHandler.List)
@@ -170,8 +178,29 @@ func main() {
 		deviceGroup.DELETE("/:id", adminOnly, deviceHandler.Delete)
 	}
 
-	// Future route groups (attendance, reports, audit logs, ...) are
-	// registered here under v1 as each phase lands.
+	// --- Phase 4: attendance ------------------------------------------------
+	// Check-in/check-out are deliberately NOT behind AuthRequired: the
+	// tablet has no dashboard login. The registered, active device_code it
+	// presents is the trust boundary instead (see internal/attendance's
+	// package doc). List/detail (attendance history) are dashboard-facing
+	// and require the same authentication as every other master data read.
+	attendanceHandler := attendance.NewHandler(attendance.NewService(
+		attendance.NewPostgresRepository(pool), employeeRepo, deviceRepo, shiftRepo, scheduleRepo,
+	))
+	attendancePublic := v1.Group("/attendance")
+	attendancePublic.Use(middleware.RateLimit(60, time.Minute)) // generous: many employees clock in around the same few minutes
+	{
+		attendancePublic.POST("/check-in", attendanceHandler.CheckIn)
+		attendancePublic.POST("/check-out", attendanceHandler.CheckOut)
+	}
+	attendanceGroup := authed.Group("/attendance")
+	{
+		attendanceGroup.GET("", attendanceHandler.List)
+		attendanceGroup.GET("/:id", attendanceHandler.Get)
+	}
+
+	// Future route groups (reports, audit logs, ...) are registered here
+	// under v1 as each phase lands.
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.AppPort,

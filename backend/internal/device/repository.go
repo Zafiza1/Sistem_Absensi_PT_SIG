@@ -3,6 +3,7 @@ package device
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -20,9 +21,17 @@ var (
 type Repository interface {
 	Create(ctx context.Context, d *Device) error
 	FindByID(ctx context.Context, id uuid.UUID) (*Device, error)
+	// FindByCode looks up a device by its human/hardware-assigned
+	// device_code — what the tablet app itself knows and sends on every
+	// attendance request, as opposed to the internal UUID.
+	FindByCode(ctx context.Context, code string) (*Device, error)
 	List(ctx context.Context, p pagination.Params) ([]Device, int64, error)
 	Update(ctx context.Context, d *Device) error
 	Delete(ctx context.Context, id uuid.UUID) error
+	// Touch records that a device was just seen (e.g. it just submitted an
+	// attendance), used to derive Device.IsOnline. Best-effort: callers
+	// should not fail the request that triggered it if Touch fails.
+	Touch(ctx context.Context, id uuid.UUID, seenAt time.Time) error
 }
 
 type PostgresRepository struct {
@@ -66,6 +75,25 @@ func (r *PostgresRepository) FindByID(ctx context.Context, id uuid.UUID) (*Devic
 		return nil, err
 	}
 	return &d, nil
+}
+
+func (r *PostgresRepository) FindByCode(ctx context.Context, code string) (*Device, error) {
+	q := `SELECT ` + selectColumns + ` FROM devices WHERE device_code = $1`
+
+	var d Device
+	err := scanDevice(r.db.QueryRow(ctx, q, code), &d)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &d, nil
+}
+
+func (r *PostgresRepository) Touch(ctx context.Context, id uuid.UUID, seenAt time.Time) error {
+	_, err := r.db.Exec(ctx, `UPDATE devices SET last_seen_at = $1 WHERE id = $2`, seenAt, id)
+	return err
 }
 
 func (r *PostgresRepository) List(ctx context.Context, p pagination.Params) ([]Device, int64, error) {

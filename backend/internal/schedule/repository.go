@@ -22,6 +22,12 @@ type Repository interface {
 	Create(ctx context.Context, s *Schedule) error
 	FindByID(ctx context.Context, id uuid.UUID) (*Schedule, error)
 	ListByEmployee(ctx context.Context, employeeID uuid.UUID) ([]Schedule, error)
+	// FindForEmployeeAndDay looks up the shift override for one employee on
+	// one ISO weekday (1=Monday..7=Sunday), used by internal/attendance to
+	// resolve which shift governs a check-in. Returns ErrNotFound when the
+	// employee has no override for that day — callers fall back to the
+	// employee's default shift.
+	FindForEmployeeAndDay(ctx context.Context, employeeID uuid.UUID, dayOfWeek int) (*Schedule, error)
 	List(ctx context.Context, p pagination.Params) ([]Schedule, int64, error)
 	Update(ctx context.Context, s *Schedule) error
 	Delete(ctx context.Context, id uuid.UUID) error
@@ -73,6 +79,20 @@ func (r *PostgresRepository) Create(ctx context.Context, s *Schedule) error {
 		return err
 	}
 	return r.reload(ctx, s)
+}
+
+func (r *PostgresRepository) FindForEmployeeAndDay(ctx context.Context, employeeID uuid.UUID, dayOfWeek int) (*Schedule, error) {
+	q := baseSelect + ` WHERE ws.employee_id = $1 AND ws.day_of_week = $2`
+
+	var s Schedule
+	err := scanSchedule(r.db.QueryRow(ctx, q, employeeID, dayOfWeek), &s)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &s, nil
 }
 
 // reload re-fetches s by ID and overwrites it in place, populating the

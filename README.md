@@ -81,7 +81,7 @@ phases working before the next one starts (see the full spec for detail).
 | 1 | Foundation — repo structure, Gin, PostgreSQL, Docker, migrations, config, logging, health check | ✅ Done |
 | 2 | Authentication — users, login, JWT + refresh token, RBAC middleware | ✅ Done |
 | 3 | Master data — employees, departments, positions, shifts, schedules, devices | ✅ Done |
-| 4 | Attendance — check-in/out, late calculation, working duration, history | ⏳ Planned |
+| 4 | Attendance — check-in/out, late calculation, working duration, history | ✅ Done |
 | 5 | Flutter tablet app — camera, face recognition, liveness, offline + sync | ⏳ Planned |
 | 6 | Next.js dashboard — all admin pages | ⏳ Planned |
 | 7 | Integration — end-to-end testing across all three apps | ⏳ Planned |
@@ -184,6 +184,9 @@ Base path: `/api/v1` (versioned from the start). Currently implemented:
 | GET/POST | `/api/v1/departments`, `/positions`, `/shifts`, `/employees`, `/schedules`, `/devices` | Bearer (+ role for writes) | Master data CRUD — see table below |
 | GET/PUT/DELETE | `.../{id}` | Bearer (+ role for writes) | Detail / update / delete per resource above |
 | POST | `/api/v1/devices/register` | Bearer, Admin+ | Register a tablet (create, spec-named endpoint) |
+| POST | `/api/v1/attendance/check-in` | **Device code**, no JWT | Tablet check-in — see Attendance below |
+| POST | `/api/v1/attendance/check-out` | **Device code**, no JWT | Tablet check-out |
+| GET | `/api/v1/attendance`, `/attendance/{id}` | Bearer | Attendance history (dashboard) |
 
 Every response uses the same envelope:
 
@@ -258,6 +261,58 @@ Notes:
 - Deleting a Department/Position/Shift that's still assigned to an active
   employee (or, for Shifts, an active schedule) is refused with a `409`
   rather than silently orphaning the reference.
+
+### Attendance (Phase 4)
+
+`POST /attendance/check-in` and `/check-out` are the two endpoints the
+Flutter tablet app (Phase 5) will call once it has resolved an employee via
+face recognition. They are **not** behind `Authorization: Bearer` — a
+kiosk tablet has no dashboard login. Instead, per the spec, the trust
+boundary is the registered `device_code` every request must present:
+
+```json
+{ "employee_id": "<uuid>", "device_code": "TAB-001" }
+```
+
+The backend re-validates everything itself, trusting nothing from the
+client except which employee/device it claims to be:
+
+1. Employee exists and `status = ACTIVE`
+2. Device exists and `status = ACTIVE` (unregistered/deactivated tablets are rejected)
+3. Employee's shift for *today* is resolved — a `work_schedules` override
+   for today's ISO weekday, falling back to the employee's default
+   `employees.shift_id`; no shift at all is a `422`
+4. Check-in timestamp is always the **server clock** in `Asia/Jakarta`
+   (hardcoded — the company operates in one timezone), never the tablet's,
+   since a client clock isn't trusted for something that affects
+   late/payroll calculations
+5. On-time vs. late is `now` vs. the shift's `start_time` + `late_tolerance_minutes`;
+   `late_minutes` counts every minute past the official start (not just past
+   tolerance)
+6. One attendance row per employee per calendar day (`UNIQUE(employee_id, attendance_date)`) —
+   a second check-in the same day is a `409`, which doubles as the
+   idempotency guard Phase 5's offline sync will rely on
+7. Check-out finds the employee's most recent **open** record (no
+   `check_out_at` yet) regardless of its date, so an overnight shift
+   crossing midnight still resolves correctly, and computes
+   `working_duration_minutes`
+
+`GET /attendance` (history) and `/attendance/{id}` **are** behind
+`Authorization: Bearer` like every other dashboard read — any authenticated
+role can view them. Filters: `employee_id`, `status`, `date_from`,
+`date_to` (`YYYY-MM-DD`), plus the standard `page`/`page_size`.
+
+Stored `status` values are only ever `ON_TIME`, `LATE`, `CHECKED_OUT` —
+`ABSENT` and `INCOMPLETE` (an employee with no row for a day, or a
+check-in with no check-out well past shift end) are **derived**, not
+written by a background job, and are planned for Phase 6's reporting
+rather than this phase.
+
+> **Security note:** an unauthenticated write endpoint gated only by a
+> device code is an acceptable trust model for tablets on the office's own
+> network, but should sit behind additional network controls (VPN/firewall
+> to that network) before ever being reachable from the public internet —
+> see Phase 8's deployment notes once written.
 
 ## Testing
 
