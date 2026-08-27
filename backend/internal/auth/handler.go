@@ -2,6 +2,7 @@ package auth
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -89,6 +90,7 @@ func (h *Handler) Logout(c *gin.Context) {
 	}
 
 	if err := h.service.Logout(c.Request.Context(), req.RefreshToken); err != nil {
+		slog.Error("auth_logout_failed", slog.String("error", err.Error()))
 		response.Fail(c, http.StatusInternalServerError, "Gagal logout", nil)
 		return
 	}
@@ -123,6 +125,7 @@ func writeAuthError(c *gin.Context, err error) {
 	case errors.Is(err, ErrInvalidRefreshToken):
 		response.Fail(c, http.StatusUnauthorized, "Refresh token tidak valid atau kedaluwarsa", nil)
 	default:
+		slog.Error("auth_unhandled_error", slog.String("error", err.Error()))
 		response.Fail(c, http.StatusInternalServerError, "Terjadi kesalahan. Silakan coba lagi.", nil)
 	}
 }

@@ -80,7 +80,7 @@ phases working before the next one starts (see the full spec for detail).
 |---|---|---|
 | 1 | Foundation — repo structure, Gin, PostgreSQL, Docker, migrations, config, logging, health check | ✅ Done |
 | 2 | Authentication — users, login, JWT + refresh token, RBAC middleware | ✅ Done |
-| 3 | Master data — employees, departments, positions, shifts, schedules, devices | ⏳ Planned |
+| 3 | Master data — employees, departments, positions, shifts, schedules, devices | ✅ Done |
 | 4 | Attendance — check-in/out, late calculation, working duration, history | ⏳ Planned |
 | 5 | Flutter tablet app — camera, face recognition, liveness, offline + sync | ⏳ Planned |
 | 6 | Next.js dashboard — all admin pages | ⏳ Planned |
@@ -181,6 +181,9 @@ Base path: `/api/v1` (versioned from the start). Currently implemented:
 | POST | `/api/v1/auth/refresh` | — | Rotates a valid refresh token for a new pair |
 | POST | `/api/v1/auth/logout` | — | Revokes a refresh token |
 | GET | `/api/v1/auth/me` | Bearer | Current authenticated user's profile |
+| GET/POST | `/api/v1/departments`, `/positions`, `/shifts`, `/employees`, `/schedules`, `/devices` | Bearer (+ role for writes) | Master data CRUD — see table below |
+| GET/PUT/DELETE | `.../{id}` | Bearer (+ role for writes) | Detail / update / delete per resource above |
+| POST | `/api/v1/devices/register` | Bearer, Admin+ | Register a tablet (create, spec-named endpoint) |
 
 Every response uses the same envelope:
 
@@ -224,6 +227,37 @@ docker compose exec -e SEED_ADMIN_EMAIL=admin@suryaintigas.com -e SEED_ADMIN_PAS
 Re-running it just resets that account's password (idempotent, matched on
 email). Omitted values fall back to a logged development default — refused
 outright when `APP_ENV=production`.
+
+### Master data (Phase 3)
+
+Every `/api/v1/*` route below `GET /health` requires `Authorization: Bearer
+<access_token>`. List/detail (`GET`) is open to any authenticated role;
+mutations follow this matrix:
+
+| Resource | Create / Update / Delete |
+|---|---|
+| Departments, Positions | `SUPER_ADMIN`, `ADMIN` |
+| Shifts, Employees, Schedules | `SUPER_ADMIN`, `ADMIN`, `HR` |
+| Devices | `SUPER_ADMIN`, `ADMIN` |
+
+Notes:
+
+- **Employees** are soft-deleted (`deleted_at`), never hard-deleted —
+  attendance history (Phase 4) references them, and reports must still see
+  someone who has left the company. `DELETE /employees/:id` deactivates.
+- **Shifts** store `start_time`/`end_time` as `"HH:MM"` strings, not a native
+  SQL time type — see `internal/shift`. `is_overnight` is derived
+  automatically (e.g. `22:00 → 06:00`) for Phase 4's late/duration math.
+- **Schedules** (`work_schedules`) give an employee a different shift per
+  ISO weekday (`day_of_week`: 1=Monday..7=Sunday). No row for a day = that
+  employee falls back to their default `employees.shift_id`.
+- **Devices**: `status` (`ACTIVE`/`INACTIVE`) is admin-controlled
+  registration state; `is_online` in the API response is *derived* from how
+  recently `last_seen_at` was updated (`internal/device.OnlineThreshold`,
+  5 minutes) — never stored, so it can't go stale.
+- Deleting a Department/Position/Shift that's still assigned to an active
+  employee (or, for Shifts, an active schedule) is refused with a `409`
+  rather than silently orphaning the reference.
 
 ## Testing
 

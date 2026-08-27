@@ -17,10 +17,17 @@ import (
 	"github.com/suryaintigas/absensi-backend/internal/auth"
 	"github.com/suryaintigas/absensi-backend/internal/config"
 	"github.com/suryaintigas/absensi-backend/internal/database"
+	"github.com/suryaintigas/absensi-backend/internal/department"
+	"github.com/suryaintigas/absensi-backend/internal/device"
+	"github.com/suryaintigas/absensi-backend/internal/employee"
 	"github.com/suryaintigas/absensi-backend/internal/health"
 	"github.com/suryaintigas/absensi-backend/internal/middleware"
+	"github.com/suryaintigas/absensi-backend/internal/position"
+	"github.com/suryaintigas/absensi-backend/internal/schedule"
+	"github.com/suryaintigas/absensi-backend/internal/shift"
 	"github.com/suryaintigas/absensi-backend/pkg/jwt"
 	"github.com/suryaintigas/absensi-backend/pkg/logger"
+	"github.com/suryaintigas/absensi-backend/pkg/rbac"
 )
 
 func main() {
@@ -93,7 +100,77 @@ func main() {
 		authGroup.GET("/me", middleware.AuthRequired(jwtManager), authHandler.Me)
 	}
 
-	// Future route groups (employees, attendance, shifts, devices, ...) are
+	// --- Phase 3: master data ---------------------------------------------
+	// Every route below requires a valid access token. Read (list/detail) is
+	// open to any authenticated role; mutations are restricted per the
+	// permission matrix in README.md's Master Data section.
+	authed := v1.Group("")
+	authed.Use(middleware.AuthRequired(jwtManager))
+
+	adminOnly := middleware.RequireRole(rbac.SuperAdmin, rbac.Admin)
+	adminOrHR := middleware.RequireRole(rbac.SuperAdmin, rbac.Admin, rbac.HR)
+
+	deptHandler := department.NewHandler(department.NewService(department.NewPostgresRepository(pool)))
+	deptGroup := authed.Group("/departments")
+	{
+		deptGroup.GET("", deptHandler.List)
+		deptGroup.GET("/:id", deptHandler.Get)
+		deptGroup.POST("", adminOnly, deptHandler.Create)
+		deptGroup.PUT("/:id", adminOnly, deptHandler.Update)
+		deptGroup.DELETE("/:id", adminOnly, deptHandler.Delete)
+	}
+
+	posHandler := position.NewHandler(position.NewService(position.NewPostgresRepository(pool)))
+	posGroup := authed.Group("/positions")
+	{
+		posGroup.GET("", posHandler.List)
+		posGroup.GET("/:id", posHandler.Get)
+		posGroup.POST("", adminOnly, posHandler.Create)
+		posGroup.PUT("/:id", adminOnly, posHandler.Update)
+		posGroup.DELETE("/:id", adminOnly, posHandler.Delete)
+	}
+
+	shiftHandler := shift.NewHandler(shift.NewService(shift.NewPostgresRepository(pool)))
+	shiftGroup := authed.Group("/shifts")
+	{
+		shiftGroup.GET("", shiftHandler.List)
+		shiftGroup.GET("/:id", shiftHandler.Get)
+		shiftGroup.POST("", adminOrHR, shiftHandler.Create)
+		shiftGroup.PUT("/:id", adminOrHR, shiftHandler.Update)
+		shiftGroup.DELETE("/:id", adminOrHR, shiftHandler.Delete)
+	}
+
+	employeeHandler := employee.NewHandler(employee.NewService(employee.NewPostgresRepository(pool)))
+	employeeGroup := authed.Group("/employees")
+	{
+		employeeGroup.GET("", employeeHandler.List)
+		employeeGroup.GET("/:id", employeeHandler.Get)
+		employeeGroup.POST("", adminOrHR, employeeHandler.Create)
+		employeeGroup.PUT("/:id", adminOrHR, employeeHandler.Update)
+		employeeGroup.DELETE("/:id", adminOrHR, employeeHandler.Delete)
+	}
+
+	scheduleHandler := schedule.NewHandler(schedule.NewService(schedule.NewPostgresRepository(pool)))
+	scheduleGroup := authed.Group("/schedules")
+	{
+		scheduleGroup.GET("", scheduleHandler.List)
+		scheduleGroup.GET("/:id", scheduleHandler.Get)
+		scheduleGroup.POST("", adminOrHR, scheduleHandler.Create)
+		scheduleGroup.PUT("/:id", adminOrHR, scheduleHandler.Update)
+		scheduleGroup.DELETE("/:id", adminOrHR, scheduleHandler.Delete)
+	}
+
+	deviceHandler := device.NewHandler(device.NewService(device.NewPostgresRepository(pool)))
+	deviceGroup := authed.Group("/devices")
+	{
+		deviceGroup.GET("", deviceHandler.List)
+		deviceGroup.GET("/:id", deviceHandler.Get)
+		deviceGroup.POST("/register", adminOnly, deviceHandler.Register)
+		deviceGroup.PUT("/:id", adminOnly, deviceHandler.Update)
+		deviceGroup.DELETE("/:id", adminOnly, deviceHandler.Delete)
+	}
+
+	// Future route groups (attendance, reports, audit logs, ...) are
 	// registered here under v1 as each phase lands.
 
 	srv := &http.Server{
