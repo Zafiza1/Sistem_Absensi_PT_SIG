@@ -10,9 +10,21 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/suryaintigas/absensi-backend/internal/auditlog"
 	"github.com/suryaintigas/absensi-backend/pkg/jwt"
+	"github.com/suryaintigas/absensi-backend/pkg/pagination"
 	"github.com/suryaintigas/absensi-backend/pkg/rbac"
 )
+
+// fakeAuditRepository discards every entry — Service.Login's audit calls
+// are exercised for their side effects on Login's own return value, not
+// asserted on directly here; auditlog has its own tests for that.
+type fakeAuditRepository struct{}
+
+func (fakeAuditRepository) Record(context.Context, *auditlog.Entry) error { return nil }
+func (fakeAuditRepository) List(context.Context, auditlog.Filter, pagination.Params) ([]auditlog.Entry, int64, error) {
+	return nil, 0, nil
+}
 
 // fakeRepository is an in-memory Repository used to unit-test Service
 // without a real database.
@@ -98,7 +110,8 @@ var _ Repository = (*fakeRepository)(nil)
 func newTestService(t *testing.T, repo Repository) *Service {
 	t.Helper()
 	manager := jwt.NewManager("test-secret")
-	return NewService(repo, manager, 15*time.Minute, 7*24*time.Hour)
+	audit := auditlog.NewService(fakeAuditRepository{})
+	return NewService(repo, manager, 15*time.Minute, 7*24*time.Hour, audit)
 }
 
 func mustHash(t *testing.T, password string) string {

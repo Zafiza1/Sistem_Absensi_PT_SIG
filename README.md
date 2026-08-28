@@ -187,6 +187,9 @@ Base path: `/api/v1` (versioned from the start). Currently implemented:
 | POST | `/api/v1/attendance/check-in` | **Device code**, no JWT | Tablet check-in — see Attendance below |
 | POST | `/api/v1/attendance/check-out` | **Device code**, no JWT | Tablet check-out |
 | GET | `/api/v1/attendance`, `/attendance/{id}` | Bearer | Attendance history (dashboard) |
+| GET/POST/PUT/DELETE | `/api/v1/users`, `/users/{id}` | Bearer, **SUPER_ADMIN only** | Dashboard account management (Phase 6) |
+| POST | `/api/v1/users/{id}/reset-password` | Bearer, SUPER_ADMIN only | Issues a new one-time generated password |
+| GET | `/api/v1/audit-logs` | Bearer, SUPER_ADMIN only | Read-only audit trail (Phase 6) |
 
 Every response uses the same envelope:
 
@@ -313,6 +316,39 @@ rather than this phase.
 > network, but should sit behind additional network controls (VPN/firewall
 > to that network) before ever being reachable from the public internet —
 > see Phase 8's deployment notes once written.
+
+### User management & audit trail (Phase 6 backend support)
+
+Built ahead of the Next.js dashboard itself so `/users` and `/audit-logs`
+are functional from day one of Phase 6, not stubbed pages waiting on a
+later backend change.
+
+- **`internal/user`** manages dashboard accounts (distinct from
+  `internal/auth`, which owns login/session mechanics against the same
+  `users` table). Every mutating endpoint is **SUPER_ADMIN-only** — unlike
+  master data, where SUPER_ADMIN and ADMIN are equally trusted, an ADMIN
+  being able to create or promote other ADMIN/SUPER_ADMIN accounts would be
+  a privilege-escalation path.
+- `POST /users` accepts an optional `password`; omitted, the server
+  generates one and returns it **once**, in that response's
+  `generated_password` field — never stored in plaintext, never
+  retrievable again. `POST /users/{id}/reset-password` follows the same
+  one-time handoff.
+- `DELETE /users/{id}` deactivates (`is_active = false`), never hard-deletes
+  — same soft-delete-by-status pattern as Employees and Devices — so a
+  removed account's history (created master data, audit-log entries) is
+  never orphaned.
+- **`internal/auditlog`** is an append-only trail: `Service.Record` is
+  called by other modules after a mutation succeeds, never exposed for
+  writes over HTTP — `GET /audit-logs` (SUPER_ADMIN only) is the only route.
+  A record failure never fails the mutation that triggered it (logged for
+  operators instead) — the audit trail must not become a reason a real
+  action fails.
+- Wired up so far: every login attempt (success, wrong password, unknown
+  email, inactive account) and every `user` mutation. Master-data modules
+  (departments, employees, devices, ...) don't call it yet — follow the
+  same `auditlog.Service.Record(...)` call already in `auth.Service.Login`
+  and `user.Service` to extend coverage as needed.
 
 ## Testing
 

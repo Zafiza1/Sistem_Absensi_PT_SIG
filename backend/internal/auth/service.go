@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/suryaintigas/absensi-backend/internal/auditlog"
 	"github.com/suryaintigas/absensi-backend/pkg/jwt"
 )
 
@@ -38,32 +39,42 @@ type Service struct {
 	jwtManager      *jwt.Manager
 	accessTokenTTL  time.Duration
 	refreshTokenTTL time.Duration
+	audit           *auditlog.Service
 }
 
 // NewService builds a Service.
-func NewService(repo Repository, jwtManager *jwt.Manager, accessTokenTTL, refreshTokenTTL time.Duration) *Service {
+func NewService(repo Repository, jwtManager *jwt.Manager, accessTokenTTL, refreshTokenTTL time.Duration, audit *auditlog.Service) *Service {
 	return &Service{
 		repo:            repo,
 		jwtManager:      jwtManager,
 		accessTokenTTL:  accessTokenTTL,
 		refreshTokenTTL: refreshTokenTTL,
+		audit:           audit,
 	}
 }
 
 // Login verifies email/password and, on success, issues a new access +
-// refresh token pair.
+// refresh token pair. Every attempt — success or failure — is written to
+// the audit trail: a string of failed logins against one account, or from
+// one IP, is exactly the kind of thing /audit-logs exists to surface.
 func (s *Service) Login(ctx context.Context, email, password, userAgent, ip string) (*TokenPair, *User, error) {
 	user, err := s.repo.FindUserByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, ErrUserNotFound) {
+			s.audit.Record(ctx, uuid.Nil, email, "", auditlog.ActionLoginFailed, "auth", "",
+				"Percobaan login gagal: email tidak ditemukan", ip)
 			return nil, nil, ErrInvalidCredentials
 		}
 		return nil, nil, err
 	}
 	if !user.IsActive {
+		s.audit.Record(ctx, user.ID, user.Name, user.Role, auditlog.ActionLoginFailed, "auth", user.ID.String(),
+			"Percobaan login gagal: akun tidak aktif", ip)
 		return nil, nil, ErrAccountInactive
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
+		s.audit.Record(ctx, user.ID, user.Name, user.Role, auditlog.ActionLoginFailed, "auth", user.ID.String(),
+			"Percobaan login gagal: password salah", ip)
 		return nil, nil, ErrInvalidCredentials
 	}
 
@@ -71,6 +82,7 @@ func (s *Service) Login(ctx context.Context, email, password, userAgent, ip stri
 	if err != nil {
 		return nil, nil, err
 	}
+	s.audit.Record(ctx, user.ID, user.Name, user.Role, auditlog.ActionLogin, "auth", user.ID.String(), "Login berhasil", ip)
 	return pair, user, nil
 }
 

@@ -15,6 +15,7 @@ import (
 	"github.com/joho/godotenv"
 
 	"github.com/suryaintigas/absensi-backend/internal/attendance"
+	"github.com/suryaintigas/absensi-backend/internal/auditlog"
 	"github.com/suryaintigas/absensi-backend/internal/auth"
 	"github.com/suryaintigas/absensi-backend/internal/config"
 	"github.com/suryaintigas/absensi-backend/internal/database"
@@ -27,6 +28,7 @@ import (
 	"github.com/suryaintigas/absensi-backend/internal/position"
 	"github.com/suryaintigas/absensi-backend/internal/schedule"
 	"github.com/suryaintigas/absensi-backend/internal/shift"
+	"github.com/suryaintigas/absensi-backend/internal/user"
 	"github.com/suryaintigas/absensi-backend/pkg/jwt"
 	"github.com/suryaintigas/absensi-backend/pkg/logger"
 	"github.com/suryaintigas/absensi-backend/pkg/rbac"
@@ -87,8 +89,10 @@ func main() {
 
 	jwtManager := jwt.NewManager(cfg.JWTSecret)
 
+	auditService := auditlog.NewService(auditlog.NewPostgresRepository(pool))
+
 	authRepo := auth.NewPostgresRepository(pool)
-	authService := auth.NewService(authRepo, jwtManager, cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
+	authService := auth.NewService(authRepo, jwtManager, cfg.AccessTokenTTL, cfg.RefreshTokenTTL, auditService)
 	authHandler := auth.NewHandler(authService)
 
 	v1 := router.Group("/api/v1")
@@ -212,8 +216,34 @@ func main() {
 		attendanceGroup.GET("/:id", attendanceHandler.Get)
 	}
 
-	// Future route groups (reports, audit logs, ...) are registered here
-	// under v1 as each phase lands.
+	// --- Phase 6 support: dashboard account management + audit trail -------
+	// User management is deliberately SUPER_ADMIN-only (not adminOnly): an
+	// ADMIN being able to create or promote other ADMIN/SUPER_ADMIN accounts
+	// would be a privilege-escalation path, unlike master data where
+	// SUPER_ADMIN and ADMIN are treated as equally trusted.
+	superAdminOnly := middleware.RequireRole(rbac.SuperAdmin)
+
+	userHandler := user.NewHandler(user.NewService(user.NewPostgresRepository(pool), auditService))
+	userGroup := authed.Group("/users")
+	{
+		userGroup.GET("", superAdminOnly, userHandler.List)
+		userGroup.GET("/:id", superAdminOnly, userHandler.Get)
+		userGroup.POST("", superAdminOnly, userHandler.Create)
+		userGroup.PUT("/:id", superAdminOnly, userHandler.Update)
+		userGroup.POST("/:id/reset-password", superAdminOnly, userHandler.ResetPassword)
+		userGroup.DELETE("/:id", superAdminOnly, userHandler.Delete)
+	}
+
+	// Audit trail is read-only via HTTP — entries are only ever written by
+	// auditlog.Service.Record from within another module (see auth.Service.
+	// Login and internal/user's Service for the modules wired up so far).
+	// SUPER_ADMIN-only: it can reveal who else has access to what, which
+	// ADMIN/HR/MANAGEMENT don't need day-to-day.
+	auditLogHandler := auditlog.NewHandler(auditService)
+	authed.GET("/audit-logs", superAdminOnly, auditLogHandler.List)
+
+	// Future route groups (reports, ...) are registered here under v1 as
+	// each phase lands.
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.AppPort,
