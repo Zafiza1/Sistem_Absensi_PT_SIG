@@ -20,6 +20,24 @@ The backend (Phases 1–4, plus the Phase 6 support described in the root
 README's [User management & audit trail](../README.md#user-management--audit-trail-phase-6-backend-support)
 section) must already be running and reachable at `NEXT_PUBLIC_API_URL`.
 
+## Design system
+
+Light mode by default (unlike the tablet app's all-dark kiosk theme — this
+is read at a desk during work hours, not a camera-lit kiosk where dark
+reduces glare), with a dark navy sidebar against a light content area — the
+classic enterprise-dashboard split, and the one place this app visually
+echoes the tablet's kiosk theme. Colors (`src/app/globals.css`) deliberately
+reuse the same hues as the Flutter app's `AppColors`
+(`mobile/lib/core/app_theme.dart`) — navy `#0F172A`/`#0B1220` and sky-blue
+`#38BDF8`/`#0369A1` — so the two apps read as one product family. The `.dark`
+class's tokens are the *same* hex values as the tablet's dark theme, not
+just a similar palette.
+
+Style is Minimalism/Swiss (borders over shadows, generous whitespace, a
+tight `0.55rem` radius) — chosen over shadcn's fancier default presets
+because this is a data-dense internal HR tool used daily by staff, not a
+marketing surface; the CRUD tables need to stay legible over flashy chrome.
+
 ## Stack notes specific to this app
 
 - **Next.js 16 / React 19.2** — bleeding-edge enough that some APIs differ

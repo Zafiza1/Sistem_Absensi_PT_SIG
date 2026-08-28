@@ -30,12 +30,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-screen">
-      <aside className="hidden w-64 shrink-0 border-r md:block">
+      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 border-r border-sidebar-border md:block">
         <SidebarNav />
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar />
-        <main className="flex-1 overflow-x-auto p-4 md:p-6">{children}</main>
+        <main className="flex-1 overflow-x-auto bg-background p-4 md:p-6">{children}</main>
       </div>
     </div>
   );

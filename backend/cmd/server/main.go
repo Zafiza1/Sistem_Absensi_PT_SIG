@@ -98,10 +98,18 @@ func main() {
 	v1 := router.Group("/api/v1")
 
 	authGroup := v1.Group("/auth")
-	authGroup.Use(middleware.RateLimit(10, time.Minute)) // brute-force guard on login/refresh
 	{
-		authGroup.POST("/login", authHandler.Login)
-		authGroup.POST("/refresh", authHandler.Refresh)
+		// The brute-force guard belongs only on the two endpoints an
+		// attacker can actually use to guess a credential (email+password,
+		// or a stolen/guessed refresh token) — not on every route in this
+		// group. /me requires an already-valid access token (guessing one
+		// isn't a meaningful attack), and is called on every page load by
+		// the dashboard's AuthProvider; sharing login's 10/min budget with
+		// it meant a real user opening a few tabs, or refreshing a few
+		// pages, could get rate-limited out of their own session.
+		loginRateLimit := middleware.RateLimit(10, time.Minute)
+		authGroup.POST("/login", loginRateLimit, authHandler.Login)
+		authGroup.POST("/refresh", loginRateLimit, authHandler.Refresh)
 		authGroup.POST("/logout", authHandler.Logout)
 		authGroup.GET("/me", middleware.AuthRequired(jwtManager), authHandler.Me)
 	}
