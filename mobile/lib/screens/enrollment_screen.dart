@@ -34,7 +34,10 @@ class EnrollmentScreen extends StatefulWidget {
 }
 
 class _EnrollmentScreenState extends State<EnrollmentScreen> {
-  static const _burstCount = 3;
+  // Matches AttendanceScreen's burst size: analyzeBurst averages the
+  // feature vector across every valid frame, and more samples means a
+  // steadier average on both the enrollment and matching side.
+  static const _burstCount = 5;
   static const _burstInterval = Duration(milliseconds: 250);
 
   final _searchController = TextEditingController();
@@ -75,7 +78,11 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
         if (i < _burstCount - 1) await Future.delayed(_burstInterval);
       }
 
-      final analysis = await widget.faceRecognitionService.analyzeBurst(paths);
+      // Enrollment is HR-supervised (HR is physically watching this
+      // capture), so the blink-liveness check that guards the
+      // unsupervised attendance flow is skipped here — see
+      // FaceRecognitionService.analyzeBurst's doc comment.
+      final analysis = await widget.faceRecognitionService.analyzeBurst(paths, requireLiveness: false);
       if (!analysis.isSuccess) {
         setState(() => _message = 'Gagal menangkap wajah dengan jelas. Coba lagi dengan pencahayaan lebih baik.');
         return;

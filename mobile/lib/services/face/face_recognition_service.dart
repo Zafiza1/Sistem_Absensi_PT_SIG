@@ -28,9 +28,15 @@ library;
 abstract class FaceRecognitionService {
   /// Analyzes a short burst of still-image file paths, most recent last.
   /// Returns whether a face was found, whether it passed a liveness check,
-  /// and — only when both are true — the feature vector to match against
-  /// enrolled profiles.
-  Future<FaceAnalysisResult> analyzeBurst(List<String> imagePaths);
+  /// and — when a face was found and (if required) liveness passed — the
+  /// feature vector to match against enrolled profiles.
+  ///
+  /// [requireLiveness] defaults to true for the unsupervised attendance
+  /// flow, where liveness is the defense against holding up a photo of
+  /// someone else. Enrollment is an HR-supervised action — HR is watching
+  /// the employee's real face get captured — so it passes false to skip
+  /// the blink requirement; nothing here otherwise cares who's enrolling.
+  Future<FaceAnalysisResult> analyzeBurst(List<String> imagePaths, {bool requireLiveness = true});
 
   /// A 0..1 similarity score between two feature vectors (1 = identical).
   /// Both vectors must have come from the same engine implementation —

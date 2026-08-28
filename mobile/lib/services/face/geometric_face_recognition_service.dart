@@ -50,40 +50,88 @@ class GeometricFaceRecognitionService implements FaceRecognitionService {
     FaceLandmarkType.rightCheek,
   ];
 
+  // Calibrated against real on-device data (Phase 5 hardware testing), not
+  // a theoretical value. After the multi-frame averaging fix, repeated
+  // genuine same-person comparisons (enrollment burst vs. separate
+  // attendance bursts, same real face, different head angle/pose each
+  // time) scored between 0.47 and 0.63 — this geometric method is quite
+  // sensitive to pose, and 0.60 was still rejecting legitimate attempts
+  // more often than not. 0.45 was chosen to make real attendance usable
+  // for this pilot, accepting a real trade-off: a wider genuine-score
+  // spread this low also narrows the gap to a false accept from a
+  // different, similar-looking face. No impostor score has been measured
+  // on this deployment yet. Before trusting this for anything beyond a
+  // supervised pilot: measure a different-person score on real hardware,
+  // and prefer improving capture consistency (on-screen face-alignment
+  // guidance, stricter pose requirements) or swapping in a trained
+  // embedding model over pushing this threshold any lower.
   @override
-  double get matchThreshold => 0.80;
+  double get matchThreshold => 0.45;
 
   @override
-  Future<FaceAnalysisResult> analyzeBurst(List<String> imagePaths) async {
+  Future<FaceAnalysisResult> analyzeBurst(List<String> imagePaths, {bool requireLiveness = true}) async {
     if (imagePaths.isEmpty) {
       return FaceAnalysisResult.failure(FaceFailureReason.noFaceDetected);
     }
 
     final frames = <Face>[];
+    var multiFaceFrames = 0;
+    var zeroFaceFrames = 0;
     for (final path in imagePaths) {
       final faces = await _detector.processImage(InputImage.fromFilePath(path));
       if (faces.length > 1) {
-        return FaceAnalysisResult.failure(FaceFailureReason.multipleFaces);
+        // A single frame in the burst seeing >1 "face" is often a false
+        // positive (background clutter, glare, a reflection) rather than a
+        // second person actually in front of the camera — do not abort the
+        // whole burst over one noisy frame. It's excluded like a zero-face
+        // frame below, and only turns into a real failure if it turns out
+        // to be the dominant signal across the burst (see the check after
+        // this loop).
+        multiFaceFrames++;
+        continue;
       }
       if (faces.length == 1) {
         frames.add(faces.single);
+      } else {
+        zeroFaceFrames++;
       }
       // A frame with zero faces (mid-blink, motion blur) is tolerated as
       // long as enough of the other frames in the burst found exactly one.
     }
 
     if (frames.length < (imagePaths.length / 2).ceil()) {
-      return FaceAnalysisResult.failure(FaceFailureReason.noFaceDetected);
+      final reason =
+          multiFaceFrames > zeroFaceFrames ? FaceFailureReason.multipleFaces : FaceFailureReason.noFaceDetected;
+      return FaceAnalysisResult.failure(reason);
     }
-    if (!_passesLivenessCheck(frames)) {
+    if (requireLiveness && !_passesLivenessCheck(frames)) {
       return FaceAnalysisResult.failure(FaceFailureReason.livenessFailed);
     }
 
-    final vector = _extractFeatureVector(frames.last);
-    if (vector == null) {
+    // Average the feature vector across every valid frame in the burst
+    // rather than using only the last one: a single still capture is
+    // noisy (a slightly turned head, one eye mid-blink, a frame that
+    // focused a beat late), and that noise was large enough in practice
+    // to push a genuine same-person comparison well under
+    // [matchThreshold]. Averaging several near-simultaneous captures of
+    // the same pose smooths that out, for both enrollment and the
+    // attendance capture being matched against it.
+    final vectors = frames.map(_extractFeatureVector).whereType<List<double>>().toList();
+    if (vectors.isEmpty) {
       return FaceAnalysisResult.failure(FaceFailureReason.poorImageQuality);
     }
-    return FaceAnalysisResult.success(vector);
+    return FaceAnalysisResult.success(_averageVectors(vectors));
+  }
+
+  List<double> _averageVectors(List<List<double>> vectors) {
+    final length = vectors.first.length;
+    final sums = List<double>.filled(length, 0);
+    for (final vector in vectors) {
+      for (var i = 0; i < length; i++) {
+        sums[i] += vector[i];
+      }
+    }
+    return sums.map((sum) => sum / vectors.length).toList();
   }
 
   bool _passesLivenessCheck(List<Face> frames) {
