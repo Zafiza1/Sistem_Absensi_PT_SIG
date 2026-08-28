@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'core/api_client.dart';
+import 'core/app_theme.dart';
 import 'data/local/app_database.dart';
 import 'data/local/attendance_queue_dao.dart';
 import 'data/local/face_profile_dao.dart';
@@ -29,10 +30,7 @@ class AbsensiApp extends StatelessWidget {
     return MaterialApp(
       title: 'Absensi PT Surya Inti Gas',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2563EB), brightness: Brightness.dark),
-        useMaterial3: true,
-      ),
+      theme: buildAppTheme(),
       home: const AppShell(),
     );
   }
@@ -141,7 +139,7 @@ class _AppShellState extends State<AppShell> {
   Widget build(BuildContext context) {
     switch (_screen) {
       case _Screen.loading:
-        return const Scaffold(backgroundColor: Colors.black, body: Center(child: CircularProgressIndicator()));
+        return const Scaffold(body: Center(child: CircularProgressIndicator()));
 
       case _Screen.splash:
         return SplashScreen(
@@ -160,17 +158,19 @@ class _AppShellState extends State<AppShell> {
         final controller = _cameraController;
         if (controller == null) {
           return Scaffold(
-            backgroundColor: Colors.black,
             body: Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (_cameraError == null) const CircularProgressIndicator(color: Colors.white),
-                    if (_cameraError != null)
-                      Text(_cameraError!, style: const TextStyle(color: Colors.redAccent), textAlign: TextAlign.center),
-                    const SizedBox(height: 16),
+                    if (_cameraError == null) const CircularProgressIndicator(),
+                    if (_cameraError != null) ...[
+                      Icon(Icons.videocam_off_rounded, color: AppColors.error, size: 48),
+                      const SizedBox(height: AppSpacing.md),
+                      Text(_cameraError!, style: TextStyle(color: AppColors.error), textAlign: TextAlign.center),
+                    ],
+                    const SizedBox(height: AppSpacing.md),
                     TextButton(onPressed: _ensureCameraReady, child: const Text('Coba Lagi')),
                   ],
                 ),
@@ -192,6 +192,7 @@ class _AppShellState extends State<AppShell> {
         return EnrollmentLoginScreen(
           authRepository: _authRepository,
           onSuccess: (_) => setState(() => _screen = _Screen.enrollment),
+          onCancel: () => setState(() => _screen = _Screen.attendance),
         );
 
       case _Screen.enrollment:
@@ -200,7 +201,7 @@ class _AppShellState extends State<AppShell> {
           // Shouldn't happen (camera is initialized before attendance is
           // ever reachable, and enrollment is only reachable from there),
           // but fail safe rather than crash on a null controller.
-          return const Scaffold(body: Center(child: Text('Kamera belum siap')));
+          return const Scaffold(body: Center(child: CircularProgressIndicator()));
         }
         return EnrollmentScreen(
           controller: controller,

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../core/api_exception.dart';
+import '../core/app_theme.dart';
 import '../data/repositories/device_repository.dart';
+import '../widgets/brand_mark.dart';
 
 /// Splash -> Device Verification -> Attendance Screen, per the spec's
 /// tablet-app flow. Runs on every cold start (not just first launch) so a
@@ -23,13 +25,21 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> {
+class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
   String? _error;
+  late final AnimationController _fadeController;
 
   @override
   void initState() {
     super.initState();
+    _fadeController = AnimationController(vsync: this, duration: AppMotion.slow)..forward();
     _check();
+  }
+
+  @override
+  void dispose() {
+    _fadeController.dispose();
+    super.dispose();
   }
 
   Future<void> _check() async {
@@ -66,41 +76,69 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
       body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'PT SURYA INTI GAS',
-              style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold),
+        child: FadeTransition(
+          opacity: _fadeController,
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.xl),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const BrandHeader(subtitle: 'Sistem Absensi Digital', markSize: 84),
+                const SizedBox(height: AppSpacing.xxl),
+                if (_error == null) ...[
+                  const SizedBox(
+                    width: 28,
+                    height: 28,
+                    child: CircularProgressIndicator(strokeWidth: 3),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  Text('Memeriksa perangkat...', style: Theme.of(context).textTheme.bodyMedium),
+                ],
+                if (_error != null) ...[
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 360),
+                    child: Container(
+                      padding: const EdgeInsets.all(AppSpacing.md),
+                      decoration: BoxDecoration(
+                        color: AppColors.errorDim.withValues(alpha: 0.4),
+                        borderRadius: BorderRadius.circular(AppRadius.sm),
+                        border: Border.all(color: AppColors.error.withValues(alpha: 0.4)),
+                      ),
+                      child: Column(
+                        children: [
+                          Icon(Icons.error_outline_rounded, color: AppColors.error, size: 32),
+                          const SizedBox(height: AppSpacing.sm),
+                          Text(
+                            _error!,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: AppColors.error, fontWeight: FontWeight.w500),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  FilledButton.icon(
+                    onPressed: () async {
+                      final code = await widget.deviceRepository.getSavedDeviceCode();
+                      if (code != null) _verify(code);
+                    },
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: const Text('Coba Lagi'),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  TextButton(
+                    onPressed: () async {
+                      await widget.deviceRepository.forgetDeviceCode();
+                      widget.onNeedsSetup();
+                    },
+                    child: Text('Daftarkan Ulang Perangkat', style: TextStyle(color: AppColors.textMuted)),
+                  ),
+                ],
+              ],
             ),
-            const SizedBox(height: 8),
-            const Text('Sistem Absensi Digital', style: TextStyle(color: Colors.white54, fontSize: 16)),
-            const SizedBox(height: 40),
-            if (_error == null) const CircularProgressIndicator(color: Colors.white),
-            if (_error != null) ...[
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32),
-                child: Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.redAccent)),
-              ),
-              const SizedBox(height: 16),
-              TextButton(
-                onPressed: () async {
-                  final code = await widget.deviceRepository.getSavedDeviceCode();
-                  if (code != null) _verify(code);
-                },
-                child: const Text('Coba Lagi'),
-              ),
-              TextButton(
-                onPressed: () async {
-                  await widget.deviceRepository.forgetDeviceCode();
-                  widget.onNeedsSetup();
-                },
-                child: const Text('Daftarkan Ulang Perangkat', style: TextStyle(color: Colors.white38)),
-              ),
-            ],
-          ],
+          ),
         ),
       ),
     );

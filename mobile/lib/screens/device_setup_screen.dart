@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../core/api_exception.dart';
+import '../core/app_theme.dart';
 import '../data/repositories/device_repository.dart';
+import '../widgets/brand_mark.dart';
 
 /// First-launch (or "daftarkan ulang") screen: a technician types in the
 /// `device_code` an admin assigned this tablet on the dashboard
@@ -63,60 +66,77 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.tablet_mac, color: Colors.white54, size: 64),
-                const SizedBox(height: 16),
-                const Text(
-                  'Pendaftaran Perangkat',
-                  style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Masukkan kode perangkat yang diberikan administrator saat mendaftarkan tablet ini di dashboard.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white54),
-                ),
-                const SizedBox(height: 24),
-                TextField(
-                  controller: _controller,
-                  autofocus: true,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white, fontSize: 18, letterSpacing: 2),
-                  textCapitalization: TextCapitalization.characters,
-                  decoration: InputDecoration(
-                    hintText: 'TAB-001',
-                    hintStyle: const TextStyle(color: Colors.white24),
-                    filled: true,
-                    fillColor: Colors.white10,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                    errorText: _error,
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(AppSpacing.xl),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 440),
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpacing.xl),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const BrandMark(size: 64),
+                      const SizedBox(height: AppSpacing.lg),
+                      Text('Pendaftaran Perangkat', style: Theme.of(context).textTheme.titleLarge),
+                      const SizedBox(height: AppSpacing.sm),
+                      Text(
+                        'Masukkan kode perangkat yang diberikan administrator saat mendaftarkan tablet ini di dashboard.',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: AppSpacing.xl),
+                      TextField(
+                        controller: _controller,
+                        autofocus: true,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 2,
+                        ),
+                        textCapitalization: TextCapitalization.characters,
+                        inputFormatters: [UpperCaseTextFormatter()],
+                        decoration: InputDecoration(
+                          hintText: 'TAB-001',
+                          prefixIcon: const Icon(Icons.tablet_mac_rounded),
+                          errorText: _error,
+                        ),
+                        onSubmitted: (_) => _submit(),
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 52,
+                        child: FilledButton(
+                          onPressed: _loading ? null : _submit,
+                          child: _loading
+                              ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5))
+                              : const Text('Verifikasi & Lanjutkan'),
+                        ),
+                      ),
+                    ],
                   ),
-                  onSubmitted: (_) => _submit(),
                 ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  height: 56,
-                  child: ElevatedButton(
-                    onPressed: _loading ? null : _submit,
-                    child: _loading
-                        ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Text('Verifikasi & Lanjutkan'),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),
       ),
     );
+  }
+}
+
+/// Forces the device-code field to uppercase as the user types, matching
+/// how device codes are always displayed/issued (e.g. "TAB-001") instead
+/// of only capitalizing the on-screen keyboard via [TextCapitalization]
+/// (which doesn't stop lowercase from a paste or a hardware keyboard).
+class UpperCaseTextFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+    return newValue.copyWith(text: newValue.text.toUpperCase(), selection: newValue.selection);
   }
 }
