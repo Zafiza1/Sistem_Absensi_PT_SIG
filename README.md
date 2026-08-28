@@ -82,8 +82,8 @@ phases working before the next one starts (see the full spec for detail).
 | 2 | Authentication — users, login, JWT + refresh token, RBAC middleware | ✅ Done |
 | 3 | Master data — employees, departments, positions, shifts, schedules, devices | ✅ Done |
 | 4 | Attendance — check-in/out, late calculation, working duration, history | ✅ Done |
-| 5 | Flutter tablet app — camera, face recognition, liveness, offline + sync | ⏳ Planned |
-| 6 | Next.js dashboard — all admin pages | ⏳ Planned |
+| 5 | Flutter tablet app — camera, face recognition, liveness, offline + sync | ✅ Done (kiosk lock-down mode deferred) |
+| 6 | Next.js dashboard — all admin pages | ✅ Done |
 | 7 | Integration — end-to-end testing across all three apps | ⏳ Planned |
 | 8 | Deployment — VPS, Nginx, HTTPS, backups, monitoring | ⏳ Planned |
 
@@ -96,8 +96,8 @@ Roles: `SUPER_ADMIN`, `ADMIN`, `HR`, `MANAGEMENT` (enforced from Phase 2 onward)
 | Go | 1.26+ | matches `backend/go.mod`; `winget install GoLang.Go` on Windows |
 | Docker + Docker Compose | recent | for `postgres` + `backend` locally, matching production |
 | PostgreSQL | 16 | only needed natively if you're not using Docker for it |
-| Node.js | 20+ | only once `web/` exists (Phase 6) |
-| Flutter SDK | stable channel | only once `mobile/` exists (Phase 5) |
+| Node.js | 20+ | for `web/` (Phase 6) — see [web/README.md](web/README.md) |
+| Flutter SDK | stable channel | for `mobile/` (Phase 5) — see [mobile/README.md](mobile/README.md) |
 
 ## Getting Started (Phase 1: backend + database only)
 
