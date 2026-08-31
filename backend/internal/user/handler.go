@@ -41,16 +41,13 @@ func NewHandler(service *Service) *Handler {
 }
 
 // actor resolves the audit-trail Actor for the currently authenticated
-// request. ID and Role come straight from the JWT claims middleware.
-// AuthRequired already put in context; Name needs one lookup since the
-// token itself doesn't carry it.
+// request straight from the JWT claims middleware.AuthRequired already put
+// in context — no database lookup needed, since the token itself carries
+// the actor's name (see pkg/jwt.Claims' doc comment).
 func (h *Handler) actor(c *gin.Context) Actor {
 	id, _ := uuid.Parse(c.GetString(middleware.ContextKeyUserID))
 	role := rbac.Role(c.GetString(middleware.ContextKeyUserRole))
-	name := ""
-	if u, err := h.service.Get(c.Request.Context(), id); err == nil {
-		name = u.Name
-	}
+	name := c.GetString(middleware.ContextKeyUserName)
 	return Actor{ID: id, Name: name, Role: role, IP: c.ClientIP()}
 }
 

@@ -8,7 +8,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
+	"github.com/suryaintigas/absensi-backend/internal/middleware"
 	"github.com/suryaintigas/absensi-backend/pkg/pagination"
+	"github.com/suryaintigas/absensi-backend/pkg/rbac"
 	"github.com/suryaintigas/absensi-backend/pkg/response"
 	"github.com/suryaintigas/absensi-backend/pkg/validator"
 )
@@ -36,6 +38,17 @@ func NewHandler(service *Service) *Handler {
 	return &Handler{service: service}
 }
 
+// actor resolves the audit-trail Actor for the currently authenticated
+// request straight from the JWT claims middleware.AuthRequired already put
+// in context — see user.Handler.actor's doc comment for why this needs no
+// database lookup.
+func (h *Handler) actor(c *gin.Context) Actor {
+	id, _ := uuid.Parse(c.GetString(middleware.ContextKeyUserID))
+	role := rbac.Role(c.GetString(middleware.ContextKeyUserRole))
+	name := c.GetString(middleware.ContextKeyUserName)
+	return Actor{ID: id, Name: name, Role: role, IP: c.ClientIP()}
+}
+
 func (h *Handler) Create(c *gin.Context) {
 	var req CreateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -47,7 +60,7 @@ func (h *Handler) Create(c *gin.Context) {
 		return
 	}
 
-	e, err := h.service.Create(c.Request.Context(), Input{
+	e, err := h.service.Create(c.Request.Context(), h.actor(c), Input{
 		EmployeeNumber: req.EmployeeNumber,
 		Name:           req.Name,
 		Email:          req.Email,
@@ -126,7 +139,7 @@ func (h *Handler) Update(c *gin.Context) {
 		return
 	}
 
-	e, err := h.service.Update(c.Request.Context(), id, Input{
+	e, err := h.service.Update(c.Request.Context(), h.actor(c), id, Input{
 		EmployeeNumber: req.EmployeeNumber,
 		Name:           req.Name,
 		Email:          req.Email,
@@ -151,7 +164,7 @@ func (h *Handler) Delete(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.Deactivate(c.Request.Context(), id); err != nil {
+	if err := h.service.Deactivate(c.Request.Context(), h.actor(c), id); err != nil {
 		writeError(c, err)
 		return
 	}

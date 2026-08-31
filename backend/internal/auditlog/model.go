@@ -48,3 +48,19 @@ type Filter struct {
 	DateFrom   *time.Time
 	DateTo     *time.Time
 }
+
+// Actor identifies who is performing a mutation, for the audit trail.
+// Lives here (not in whichever module happens to need it first, e.g.
+// internal/user) so that internal/device, internal/employee, and any
+// future module can all build one without depending on each other — every
+// module already depends on auditlog, so this creates no new coupling.
+// Handlers build it from the JWT claims middleware.AuthRequired already
+// put in the request context (ID, Name, Role — see pkg/jwt.Claims' doc
+// comment for why Name is safe to trust from the token alone) plus the
+// request's IP.
+type Actor struct {
+	ID   uuid.UUID
+	Name string
+	Role rbac.Role
+	IP   string
+}

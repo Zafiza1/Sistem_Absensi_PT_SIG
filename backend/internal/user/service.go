@@ -16,16 +16,10 @@ import (
 
 var ErrInvalidRole = errors.New("user: invalid role")
 
-// Actor identifies who is performing a mutation, for the audit trail.
-// Handlers build this from the JWT claims middleware.AuthRequired already
-// put in the request context, plus one lookup for the actor's current
-// display name.
-type Actor struct {
-	ID   uuid.UUID
-	Name string
-	Role rbac.Role
-	IP   string
-}
+// Actor identifies who is performing a mutation, for the audit trail. It
+// lives in package auditlog (shared with device and employee) rather than
+// here — see auditlog.Actor's doc comment.
+type Actor = auditlog.Actor
 
 type Service struct {
 	repo  Repository

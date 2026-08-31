@@ -23,9 +23,18 @@ var ErrInvalidToken = errors.New("jwt: invalid or expired access token")
 
 // Claims is the payload carried by an access token: the standard
 // registered claims (Subject = user ID, IssuedAt, ExpiresAt) plus the
-// user's role, which is what authorization middleware checks.
+// user's role, which is what authorization middleware checks, and their
+// display name. Name is a convenience, not a security claim: it lets every
+// handler build an audit-log Actor{ID, Name, Role} straight from context,
+// with zero extra database lookups per request, instead of each module
+// that writes audit entries needing its own "look up this user's name"
+// dependency. At most 15 minutes stale (the access token TTL) if the
+// user's name changes — acceptable for a value that's only ever a
+// denormalized snapshot in the audit trail anyway (see migrations/
+// 000012's comment on actor_name).
 type Claims struct {
 	Role rbac.Role `json:"role"`
+	Name string    `json:"name"`
 	jwtlib.RegisteredClaims
 }
 
@@ -40,11 +49,13 @@ func NewManager(secret string) *Manager {
 	return &Manager{secret: []byte(secret)}
 }
 
-// GenerateAccessToken issues a signed token for userID/role, valid for ttl.
-func (m *Manager) GenerateAccessToken(userID uuid.UUID, role rbac.Role, ttl time.Duration) (string, error) {
+// GenerateAccessToken issues a signed token for userID/role/name, valid
+// for ttl.
+func (m *Manager) GenerateAccessToken(userID uuid.UUID, role rbac.Role, name string, ttl time.Duration) (string, error) {
 	now := time.Now()
 	claims := Claims{
 		Role: role,
+		Name: name,
 		RegisteredClaims: jwtlib.RegisteredClaims{
 			Subject:   userID.String(),
 			IssuedAt:  jwtlib.NewNumericDate(now),

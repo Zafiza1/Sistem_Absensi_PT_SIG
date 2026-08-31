@@ -146,7 +146,7 @@ func (s *Service) GetUserByID(ctx context.Context, id uuid.UUID) (*User, error) 
 }
 
 func (s *Service) issueTokenPair(ctx context.Context, user *User, userAgent, ip string) (*TokenPair, error) {
-	access, err := s.jwtManager.GenerateAccessToken(user.ID, user.Role, s.accessTokenTTL)
+	access, err := s.jwtManager.GenerateAccessToken(user.ID, user.Role, user.Name, s.accessTokenTTL)
 	if err != nil {
 		return nil, err
 	}

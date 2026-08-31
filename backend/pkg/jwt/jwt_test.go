@@ -13,7 +13,7 @@ func TestGenerateAndParseAccessToken_RoundTrip(t *testing.T) {
 	manager := NewManager("test-secret")
 	userID := uuid.New()
 
-	token, err := manager.GenerateAccessToken(userID, rbac.Admin, time.Minute)
+	token, err := manager.GenerateAccessToken(userID, rbac.Admin, "Test Admin", time.Minute)
 	if err != nil {
 		t.Fatalf("GenerateAccessToken() error = %v", err)
 	}
@@ -28,11 +28,14 @@ func TestGenerateAndParseAccessToken_RoundTrip(t *testing.T) {
 	if claims.Role != rbac.Admin {
 		t.Errorf("claims.Role = %q, want %q", claims.Role, rbac.Admin)
 	}
+	if claims.Name != "Test Admin" {
+		t.Errorf("claims.Name = %q, want %q", claims.Name, "Test Admin")
+	}
 }
 
 func TestParseAccessToken_Expired(t *testing.T) {
 	manager := NewManager("test-secret")
-	token, err := manager.GenerateAccessToken(uuid.New(), rbac.HR, -time.Minute)
+	token, err := manager.GenerateAccessToken(uuid.New(), rbac.HR, "Test HR", -time.Minute)
 	if err != nil {
 		t.Fatalf("GenerateAccessToken() error = %v", err)
 	}
@@ -46,7 +49,7 @@ func TestParseAccessToken_WrongSecret(t *testing.T) {
 	issuer := NewManager("secret-a")
 	verifier := NewManager("secret-b")
 
-	token, err := issuer.GenerateAccessToken(uuid.New(), rbac.Management, time.Minute)
+	token, err := issuer.GenerateAccessToken(uuid.New(), rbac.Management, "Test Manager", time.Minute)
 	if err != nil {
 		t.Fatalf("GenerateAccessToken() error = %v", err)
 	}

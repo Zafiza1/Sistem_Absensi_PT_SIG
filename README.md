@@ -345,10 +345,20 @@ later backend change.
   operators instead) — the audit trail must not become a reason a real
   action fails.
 - Wired up so far: every login attempt (success, wrong password, unknown
-  email, inactive account) and every `user` mutation. Master-data modules
-  (departments, employees, devices, ...) don't call it yet — follow the
-  same `auditlog.Service.Record(...)` call already in `auth.Service.Login`
-  and `user.Service` to extend coverage as needed.
+  email, inactive account), every `user` mutation, every `device` mutation
+  (register/update/delete — including activate/deactivate, which is just an
+  `Update` with a changed `status`), and every `employee` mutation
+  (create/update/deactivate). Departments/positions/shifts/schedules don't
+  call it yet — follow the same `auditlog.Service.Record(...)` call already
+  in `auth.Service.Login`, `user.Service`, `device.Service`, and
+  `employee.Service` to extend coverage as needed.
+- Every audited module's handler builds its `auditlog.Actor{ID, Name, Role,
+  IP}` straight from the JWT claims `middleware.AuthRequired` already put in
+  the request context — no per-request database lookup for the actor's
+  display name, because the access token itself carries it (`pkg/jwt.Claims.
+  Name`, populated at login/refresh time). `Actor` is defined once in
+  `internal/auditlog` and type-aliased from `user`/`device`/`employee` so
+  none of those modules needs to depend on each other.
 
 ## Testing
 

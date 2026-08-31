@@ -159,7 +159,7 @@ func main() {
 	}
 
 	employeeRepo := employee.NewPostgresRepository(pool)
-	employeeHandler := employee.NewHandler(employee.NewService(employeeRepo))
+	employeeHandler := employee.NewHandler(employee.NewService(employeeRepo, auditService))
 	employeeGroup := authed.Group("/employees")
 	{
 		employeeGroup.GET("", employeeHandler.List)
@@ -181,7 +181,7 @@ func main() {
 	}
 
 	deviceRepo := device.NewPostgresRepository(pool)
-	deviceHandler := device.NewHandler(device.NewService(deviceRepo))
+	deviceHandler := device.NewHandler(device.NewService(deviceRepo, auditService))
 	deviceGroup := authed.Group("/devices")
 	{
 		deviceGroup.GET("", deviceHandler.List)

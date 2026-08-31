@@ -18,6 +18,12 @@ import (
 const (
 	ContextKeyUserID   = "auth_user_id"
 	ContextKeyUserRole = "auth_user_role"
+	// ContextKeyUserName is a convenience, not a security claim: it lets
+	// any handler build an audit-log Actor{ID, Name, Role} straight from
+	// context, without a per-request database lookup — see pkg/jwt.
+	// Claims' doc comment for why this is safe to trust from the token
+	// alone.
+	ContextKeyUserName = "auth_user_name"
 )
 
 // AuthRequired validates the "Authorization: Bearer <token>" header using
@@ -44,6 +50,7 @@ func AuthRequired(manager *jwt.Manager) gin.HandlerFunc {
 
 		c.Set(ContextKeyUserID, claims.Subject)
 		c.Set(ContextKeyUserRole, string(claims.Role))
+		c.Set(ContextKeyUserName, claims.Name)
 		c.Next()
 	}
 }
