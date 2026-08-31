@@ -84,7 +84,7 @@ phases working before the next one starts (see the full spec for detail).
 | 4 | Attendance — check-in/out, late calculation, working duration, history | ✅ Done |
 | 5 | Flutter tablet app — camera, face recognition, liveness, offline + sync | ✅ Done (kiosk lock-down mode deferred) |
 | 6 | Next.js dashboard — all admin pages | ✅ Done |
-| 7 | Integration — end-to-end testing across all three apps | ⏳ Planned |
+| 7 | Integration — end-to-end testing across all three apps | 🟡 Core scenarios verified, not exhaustive |
 | 8 | Deployment — VPS, Nginx, HTTPS, backups, monitoring | ⏳ Planned |
 
 Roles: `SUPER_ADMIN`, `ADMIN`, `HR`, `MANAGEMENT` (enforced from Phase 2 onward).
