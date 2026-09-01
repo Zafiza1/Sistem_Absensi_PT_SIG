@@ -125,7 +125,7 @@ export default function ShiftsPage() {
     <div>
       <PageHeader
         title="Shift"
-        description="Kelola jam kerja dan toleransi keterlambatan"
+        description="Definisi jam kerja & toleransi keterlambatan. Dipakai oleh Jam Kerja dan Jadwal Kerja untuk menentukan shift tiap hari."
         action={
           writable && (
             <Button onClick={openCreate}>

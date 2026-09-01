@@ -138,7 +138,7 @@ export default function DashboardHomePage() {
           tone="blue"
         />
         <StatCard
-          title="Departemen"
+          title="Divisi"
           value={String(stats?.departments ?? "-")}
           icon={Building2}
           loading={loading}

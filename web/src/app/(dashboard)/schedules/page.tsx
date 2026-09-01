@@ -115,7 +115,7 @@ export default function SchedulesPage() {
     <div>
       <PageHeader
         title="Jadwal Kerja"
-        description="Atur shift khusus per hari untuk karyawan tertentu (mengganti shift default mereka)"
+        description="Pengecualian per karyawan: shift khusus di hari tertentu, menimpa jadwal kerja perusahaan dan shift default karyawan"
         action={
           writable && (
             <Button onClick={openCreate}>

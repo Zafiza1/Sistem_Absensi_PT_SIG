@@ -84,7 +84,7 @@ phases working before the next one starts (see the full spec for detail).
 | 4 | Attendance — check-in/out, late calculation, working duration, history | ✅ Done |
 | 5 | Flutter tablet app — camera, face recognition, liveness, offline + sync | ✅ Done (kiosk lock-down mode deferred) |
 | 6 | Next.js dashboard — all admin pages | ✅ Done |
-| 7 | Integration — end-to-end testing across all three apps | 🟡 Core scenarios verified, not exhaustive |
+| 7 | Integration — end-to-end testing across all three apps | 🟡 Core + shift/schedule edge cases verified; see Phase 7 notes |
 | 8 | Deployment — VPS, Nginx, HTTPS, backups, monitoring | ⏳ Planned |
 
 Roles: `SUPER_ADMIN`, `ADMIN`, `HR`, `MANAGEMENT` (enforced from Phase 2 onward).
@@ -183,10 +183,12 @@ Base path: `/api/v1` (versioned from the start). Currently implemented:
 | GET | `/api/v1/auth/me` | Bearer | Current authenticated user's profile |
 | GET/POST | `/api/v1/departments`, `/positions`, `/shifts`, `/employees`, `/schedules`, `/devices` | Bearer (+ role for writes) | Master data CRUD — see table below |
 | GET/PUT/DELETE | `.../{id}` | Bearer (+ role for writes) | Detail / update / delete per resource above |
+| GET/PUT | `/api/v1/company-schedule` | Bearer (+ Admin/HR for write) | Company-wide default weekly schedule — see Attendance below |
 | POST | `/api/v1/devices/register` | Bearer, Admin+ | Register a tablet (create, spec-named endpoint) |
 | POST | `/api/v1/attendance/check-in` | **Device code**, no JWT | Tablet check-in — see Attendance below |
 | POST | `/api/v1/attendance/check-out` | **Device code**, no JWT | Tablet check-out |
 | GET | `/api/v1/attendance`, `/attendance/{id}` | Bearer | Attendance history (dashboard) |
+| GET | `/api/v1/reports/monthly` | Bearer | Monthly attendance report (JSON, or `.xlsx` with `?format=xlsx`) |
 | GET/POST/PUT/DELETE | `/api/v1/users`, `/users/{id}` | Bearer, **SUPER_ADMIN only** | Dashboard account management (Phase 6) |
 | POST | `/api/v1/users/{id}/reset-password` | Bearer, SUPER_ADMIN only | Issues a new one-time generated password |
 | GET | `/api/v1/audit-logs` | Bearer, SUPER_ADMIN only | Read-only audit trail (Phase 6) |
@@ -243,7 +245,7 @@ mutations follow this matrix:
 | Resource | Create / Update / Delete |
 |---|---|
 | Departments, Positions | `SUPER_ADMIN`, `ADMIN` |
-| Shifts, Employees, Schedules | `SUPER_ADMIN`, `ADMIN`, `HR` |
+| Shifts, Employees, Schedules, Company schedule | `SUPER_ADMIN`, `ADMIN`, `HR` |
 | Devices | `SUPER_ADMIN`, `ADMIN` |
 
 Notes:
@@ -254,9 +256,14 @@ Notes:
 - **Shifts** store `start_time`/`end_time` as `"HH:MM"` strings, not a native
   SQL time type — see `internal/shift`. `is_overnight` is derived
   automatically (e.g. `22:00 → 06:00`) for Phase 4's late/duration math.
-- **Schedules** (`work_schedules`) give an employee a different shift per
-  ISO weekday (`day_of_week`: 1=Monday..7=Sunday). No row for a day = that
-  employee falls back to their default `employees.shift_id`.
+- **Schedules** (`work_schedules`) give *one employee* a different shift on
+  a specific ISO weekday (`day_of_week`: 1=Monday..7=Sunday) — the
+  per-employee exception layer.
+- **Company schedule** (`company_schedules`, `GET/PUT /company-schedule`) is
+  the company-wide default: which shift each weekday resolves to for
+  *every* employee. `PUT` replaces the whole week at once; a day sent with
+  `"shift_id": null` is a non-working day (check-in refused). See Attendance
+  below for how the three layers combine.
 - **Devices**: `status` (`ACTIVE`/`INACTIVE`) is admin-controlled
   registration state; `is_online` in the API response is *derived* from how
   recently `last_seen_at` was updated (`internal/device.OnlineThreshold`,
@@ -282,9 +289,15 @@ client except which employee/device it claims to be:
 
 1. Employee exists and `status = ACTIVE`
 2. Device exists and `status = ACTIVE` (unregistered/deactivated tablets are rejected)
-3. Employee's shift for *today* is resolved — a `work_schedules` override
-   for today's ISO weekday, falling back to the employee's default
-   `employees.shift_id`; no shift at all is a `422`
+3. Employee's shift for *today* is resolved, in priority order:
+   **(a)** a per-employee `work_schedules` override for today's ISO weekday,
+   **(b)** the company-wide `company_schedules` default for that weekday —
+   where a weekday configured with no shift is a non-working day and the
+   check-in is refused with a `422`, **(c)** the employee's own default
+   `employees.shift_id`. Nothing at any level is a `422` ("belum memiliki
+   shift atau jadwal"). A weekday with no `company_schedules` row at all
+   skips straight to (c), so an install that never sets a company schedule
+   behaves exactly as before this layer existed.
 4. Check-in timestamp is always the **server clock** in `Asia/Jakarta`
    (hardcoded — the company operates in one timezone), never the tablet's,
    since a client clock isn't trusted for something that affects
@@ -308,8 +321,33 @@ role can view them. Filters: `employee_id`, `status`, `date_from`,
 Stored `status` values are only ever `ON_TIME`, `LATE`, `CHECKED_OUT` —
 `ABSENT` and `INCOMPLETE` (an employee with no row for a day, or a
 check-in with no check-out well past shift end) are **derived**, not
-written by a background job, and are planned for Phase 6's reporting
-rather than this phase.
+written by a background job. `ABSENT` is materialised by the monthly
+report (see below).
+
+Note: `attendances.status` becomes `CHECKED_OUT` after check-out, which
+overwrites the earlier `ON_TIME`/`LATE`. `late_minutes` is **not**
+overwritten, so "was this person late that day" is read from
+`late_minutes > 0`, not from `status`, once they've checked out.
+
+### Reports (`internal/report`)
+
+`GET /api/v1/reports/monthly?month=YYYY-MM[&department_id=<uuid>][&format=xlsx]`
+— any authenticated role, like attendance history.
+
+- Without `format`, returns JSON: per employee, a `days[]` grid (one cell
+  per calendar day, status `ON_TIME`/`LATE`/`ABSENT`/`OFF`/`PENDING`) plus
+  month totals (`on_time`, `late_count`, `late_minutes`, `absent`,
+  `working_days`).
+- `format=xlsx` streams a three-sheet workbook (`github.com/xuri/excelize`):
+  **Ringkasan** (per-employee totals), **Detail Harian** (the day grid:
+  `H` = on time, `T15` = 15 min late, `A` = absent, blank = non-working /
+  future), **Keterangan** (legend).
+- `ABSENT` is derived here: for each employee × each past calendar day, if
+  it resolves to a working day (same three layers as
+  `attendance.resolveShift`: per-employee `work_schedules` → company
+  `company_schedules` → `employees.shift_id`) and there is no attendance
+  row, that day is counted absent. Today and future working days are
+  `PENDING`, never absent.
 
 > **Security note:** an unauthenticated write endpoint gated only by a
 > device code is an acceptable trust model for tablets on the office's own
@@ -347,11 +385,12 @@ later backend change.
 - Wired up so far: every login attempt (success, wrong password, unknown
   email, inactive account), every `user` mutation, every `device` mutation
   (register/update/delete — including activate/deactivate, which is just an
-  `Update` with a changed `status`), and every `employee` mutation
-  (create/update/deactivate). Departments/positions/shifts/schedules don't
-  call it yet — follow the same `auditlog.Service.Record(...)` call already
-  in `auth.Service.Login`, `user.Service`, `device.Service`, and
-  `employee.Service` to extend coverage as needed.
+  `Update` with a changed `status`), every `employee` mutation
+  (create/update/deactivate), and every `company_schedule` save.
+  Departments/positions/shifts/schedules don't call it yet — follow the same
+  `auditlog.Service.Record(...)` call already in `auth.Service.Login`,
+  `user.Service`, `device.Service`, `employee.Service`, and
+  `companyschedule.Service` to extend coverage as needed.
 - Every audited module's handler builds its `auditlog.Actor{ID, Name, Role,
   IP}` straight from the JWT claims `middleware.AuthRequired` already put in
   the request context — no per-request database lookup for the actor's
@@ -368,6 +407,71 @@ go build ./...   # compiles everything
 go vet ./...     # static analysis
 go test ./...    # unit tests — auth service + JWT covered from Phase 2 onward
 ```
+
+### Phase 7 — integration test status
+
+End-to-end verification across backend + tablet + dashboard. Done so far:
+
+- ✅ 4 core scenarios (register device → face enrol → check-in → check-out →
+  dashboard history; late check-in; duplicate check-in rejected; offline
+  sync replay).
+- ✅ Bug fixed: `/auth/login` + `/auth/refresh` rate limiter counted the
+  dashboard's own requests per shared proxy IP, locking real users out
+  (`31d1a1e`).
+- ✅ Gap closed: audit trail now covers device + employee mutations
+  (`1acf0af`), not just auth/users.
+- ✅ **Overnight shift (22:00 → 06:00):** late calculation was wrong for a
+  check-in *after midnight* — measured against the coming night's 22:00
+  instead of the previous night's, so a 2½-hour-late arrival was recorded
+  on-time. Fixed in `internal/attendance` (`computeCheckInStatus`), covered
+  by `TestComputeCheckInStatus_OvernightShift`.
+- ✅ **Schedule override (`work_schedules`):** a per-weekday override now
+  verified to win over `employees.shift_id`, to fall back to the default
+  shift on days with no override, and to let a shift-less employee check in
+  on a day that has one. Covered by `TestService_CheckIn_*ScheduleOverride*`.
+- ✅ **Company-wide default schedule (`company_schedules`):** new middle
+  layer in shift resolution (per-employee override → company schedule →
+  employee default). A company weekday with no shift is a non-working day
+  (`ErrDayOff`, `422`); a per-employee override still lets an individual
+  work a company day off. Covered by
+  `TestService_ResolveShift_CompanySchedulePriority` and
+  `internal/companyschedule`'s service tests.
+- ✅ **Monthly attendance report + Excel export (`internal/report`):**
+  per-employee on-time / late (with minutes) / absent totals for a month,
+  with a day-by-day grid, downloadable as `.xlsx`. `ABSENT` is derived by
+  walking every past working day (same three shift-resolution layers as
+  check-in). Covered by `internal/report`'s service tests + an xlsx smoke
+  test.
+
+**Company working hours** (PT Surya Inti Gas — 50–200 employees, one shared
+pattern — set once in the dashboard's **Jam Kerja** page):
+
+| Day | Hours | How it's configured |
+|---|---|---|
+| Mon–Fri | 08:00–16:00 | `company_schedules` → "Reguler" shift |
+| Saturday | 08:00–14:00 | `company_schedules` → "Sabtu" shift |
+| Sunday | off | `company_schedules` row with `shift_id NULL` — check-in refused |
+
+Every employee (including new hires) follows this automatically; a personal
+`work_schedules` row is only needed for someone whose hours differ.
+`TestService_ResolveShift_CompanyWeeklySchedule` still covers the older
+"Saturday via per-employee `work_schedules`" arrangement, which also works.
+
+No overnight/night shift is in use, so the limitation below does not affect
+current operations.
+
+Known limitations (deferred):
+
+- Overtime ("lembur") and night-shift hours are not defined by the company
+  yet. There is no separate overtime concept in the system — check-out only
+  records actual worked minutes; HR would compute overtime from that. If
+  dedicated overtime tracking/approval is needed later it's a new feature to
+  scope.
+- If a night/overnight shift is ever added *and* driven by a per-weekday
+  `work_schedules` override, note the override is keyed on the weekday the
+  shift **starts** — a post-midnight check-in resolves against the new day's
+  weekday, so it needs a row on that day too (or a matching default shift).
+- Kiosk lock-down mode on the tablet is not built (deferred from Phase 5).
 
 ## Docker Deployment
 

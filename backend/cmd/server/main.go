@@ -17,6 +17,7 @@ import (
 	"github.com/suryaintigas/absensi-backend/internal/attendance"
 	"github.com/suryaintigas/absensi-backend/internal/auditlog"
 	"github.com/suryaintigas/absensi-backend/internal/auth"
+	"github.com/suryaintigas/absensi-backend/internal/companyschedule"
 	"github.com/suryaintigas/absensi-backend/internal/config"
 	"github.com/suryaintigas/absensi-backend/internal/database"
 	"github.com/suryaintigas/absensi-backend/internal/department"
@@ -26,6 +27,7 @@ import (
 	"github.com/suryaintigas/absensi-backend/internal/health"
 	"github.com/suryaintigas/absensi-backend/internal/middleware"
 	"github.com/suryaintigas/absensi-backend/internal/position"
+	"github.com/suryaintigas/absensi-backend/internal/report"
 	"github.com/suryaintigas/absensi-backend/internal/schedule"
 	"github.com/suryaintigas/absensi-backend/internal/shift"
 	"github.com/suryaintigas/absensi-backend/internal/user"
@@ -180,6 +182,17 @@ func main() {
 		scheduleGroup.DELETE("/:id", adminOrHR, scheduleHandler.Delete)
 	}
 
+	// Company-wide default weekly schedule: the shift each weekday defaults
+	// to for every employee. Sits above employees.shift_id and below a
+	// per-employee work_schedules override in attendance.resolveShift.
+	companyScheduleRepo := companyschedule.NewPostgresRepository(pool)
+	companyScheduleHandler := companyschedule.NewHandler(companyschedule.NewService(companyScheduleRepo, auditService))
+	companyScheduleGroup := authed.Group("/company-schedule")
+	{
+		companyScheduleGroup.GET("", companyScheduleHandler.Get)
+		companyScheduleGroup.PUT("", adminOrHR, companyScheduleHandler.Set)
+	}
+
 	deviceRepo := device.NewPostgresRepository(pool)
 	deviceHandler := device.NewHandler(device.NewService(deviceRepo, auditService))
 	deviceGroup := authed.Group("/devices")
@@ -210,7 +223,7 @@ func main() {
 	// package doc). List/detail (attendance history) are dashboard-facing
 	// and require the same authentication as every other master data read.
 	attendanceHandler := attendance.NewHandler(attendance.NewService(
-		attendance.NewPostgresRepository(pool), employeeRepo, deviceRepo, shiftRepo, scheduleRepo,
+		attendance.NewPostgresRepository(pool), employeeRepo, deviceRepo, shiftRepo, scheduleRepo, companyScheduleRepo,
 	))
 	attendancePublic := v1.Group("/attendance")
 	attendancePublic.Use(middleware.RateLimit(60, time.Minute)) // generous: many employees clock in around the same few minutes
@@ -223,6 +236,12 @@ func main() {
 		attendanceGroup.GET("", attendanceHandler.List)
 		attendanceGroup.GET("/:id", attendanceHandler.Get)
 	}
+
+	// Reports are dashboard reads open to any authenticated role, like
+	// attendance history. The monthly report is where ABSENT is derived
+	// (see internal/report's package doc); ?format=xlsx returns a download.
+	reportHandler := report.NewHandler(report.NewService(report.NewPostgresRepository(pool)))
+	authed.GET("/reports/monthly", reportHandler.Monthly)
 
 	// --- Phase 6 support: dashboard account management + audit trail -------
 	// User management is deliberately SUPER_ADMIN-only (not adminOnly): an

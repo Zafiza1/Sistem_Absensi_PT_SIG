@@ -5,8 +5,8 @@ export default function DepartmentsPage() {
     <SimpleNameCrud
       resource="departments"
       endpoint="/departments"
-      singularLabel="Departemen"
-      pluralLabel="Departemen"
+      singularLabel="Divisi"
+      pluralLabel="Divisi"
     />
   );
 }

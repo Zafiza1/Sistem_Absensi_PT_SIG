@@ -173,7 +173,7 @@ export default function EmployeesPage() {
             <TableRow>
               <TableHead>NIK</TableHead>
               <TableHead>Nama</TableHead>
-              <TableHead>Departemen</TableHead>
+              <TableHead>Divisi</TableHead>
               <TableHead>Jabatan</TableHead>
               <TableHead>Shift</TableHead>
               <TableHead>Status</TableHead>
@@ -281,7 +281,7 @@ export default function EmployeesPage() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Departemen</Label>
+              <Label>Divisi</Label>
               <Select
                 items={{ [UNASSIGNED]: "Belum ditentukan", ...Object.fromEntries(departments.map((d) => [d.id, d.name])) }}
                 value={form.department_id}
@@ -321,7 +321,7 @@ export default function EmployeesPage() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Shift Default</Label>
+              <Label>Shift Default (opsional)</Label>
               <Select
                 items={{
                   [UNASSIGNED]: "Belum ditentukan",
@@ -343,7 +343,8 @@ export default function EmployeesPage() {
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Dipakai jika karyawan tidak punya jadwal khusus untuk hari tersebut (lihat halaman Jadwal Kerja).
+                Boleh dikosongkan. Cadangan bila Jam Kerja perusahaan belum diatur untuk suatu hari.
+                Untuk jam kerja yang berbeda dari perusahaan, gunakan menu Jadwal Kerja.
               </p>
             </div>
             {editing && (

@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/suryaintigas/absensi-backend/internal/companyschedule"
 	"github.com/suryaintigas/absensi-backend/internal/device"
 	"github.com/suryaintigas/absensi-backend/internal/employee"
 	"github.com/suryaintigas/absensi-backend/internal/schedule"
@@ -23,6 +24,7 @@ var (
 	ErrEmployeeNotFound    = errors.New("attendance: employee not found or inactive")
 	ErrDeviceNotRegistered = errors.New("attendance: device not registered or inactive")
 	ErrNoShiftAssigned     = errors.New("attendance: employee has no shift assigned")
+	ErrDayOff              = errors.New("attendance: today is a non-working day in the company schedule")
 	ErrAlreadyCheckedIn    = errors.New("attendance: employee already has an attendance record today")
 	ErrNoOpenCheckIn       = errors.New("attendance: no active check-in found for this employee")
 	// ErrAlreadyCheckedOut is defined in repository.go and reused here
@@ -50,11 +52,12 @@ var jakarta = func() *time.Location {
 // database, independent of any business rules those modules' own services
 // might add later.
 type Service struct {
-	repo         Repository
-	employeeRepo employee.Repository
-	deviceRepo   device.Repository
-	shiftRepo    shift.Repository
-	scheduleRepo schedule.Repository
+	repo                Repository
+	employeeRepo        employee.Repository
+	deviceRepo          device.Repository
+	shiftRepo           shift.Repository
+	scheduleRepo        schedule.Repository
+	companyScheduleRepo companyschedule.Repository
 }
 
 func NewService(
@@ -63,13 +66,15 @@ func NewService(
 	deviceRepo device.Repository,
 	shiftRepo shift.Repository,
 	scheduleRepo schedule.Repository,
+	companyScheduleRepo companyschedule.Repository,
 ) *Service {
 	return &Service{
-		repo:         repo,
-		employeeRepo: employeeRepo,
-		deviceRepo:   deviceRepo,
-		shiftRepo:    shiftRepo,
-		scheduleRepo: scheduleRepo,
+		repo:                repo,
+		employeeRepo:        employeeRepo,
+		deviceRepo:          deviceRepo,
+		shiftRepo:           shiftRepo,
+		scheduleRepo:        scheduleRepo,
+		companyScheduleRepo: companyScheduleRepo,
 	}
 }
 
@@ -187,21 +192,46 @@ func (s *Service) validDevice(ctx context.Context, code string) (*device.Device,
 	return dev, nil
 }
 
-// resolveShift prefers a per-weekday schedule override, falling back to
-// the employee's default shift.
+// resolveShift determines which shift governs a check-in on dayOfWeek, in
+// priority order:
+//
+//  1. a per-employee work_schedules override for that weekday
+//  2. the company-wide default schedule (companyschedule) — a weekday
+//     configured there with no shift is a non-working day (ErrDayOff)
+//  3. the employee's own default shift (employees.shift_id)
+//
+// Nothing at any level is ErrNoShiftAssigned.
 func (s *Service) resolveShift(ctx context.Context, emp *employee.Employee, dayOfWeek int) (*shift.Shift, error) {
+	// 1. per-employee override
 	sc, err := s.scheduleRepo.FindForEmployeeAndDay(ctx, emp.ID, dayOfWeek)
 	switch {
 	case err == nil:
 		return s.shiftRepo.FindByID(ctx, sc.ShiftID)
 	case errors.Is(err, schedule.ErrNotFound):
-		if emp.ShiftID == nil {
-			return nil, ErrNoShiftAssigned
-		}
-		return s.shiftRepo.FindByID(ctx, *emp.ShiftID)
+		// fall through
 	default:
 		return nil, err
 	}
+
+	// 2. company-wide default schedule
+	cd, err := s.companyScheduleRepo.FindByDay(ctx, dayOfWeek)
+	switch {
+	case err == nil:
+		if cd.ShiftID == nil {
+			return nil, ErrDayOff
+		}
+		return s.shiftRepo.FindByID(ctx, *cd.ShiftID)
+	case errors.Is(err, companyschedule.ErrNotFound):
+		// fall through
+	default:
+		return nil, err
+	}
+
+	// 3. employee default shift
+	if emp.ShiftID == nil {
+		return nil, ErrNoShiftAssigned
+	}
+	return s.shiftRepo.FindByID(ctx, *emp.ShiftID)
 }
 
 // touchDevice best-effort records that the device was just seen. A failure
@@ -227,6 +257,22 @@ func computeCheckInStatus(now time.Time, sh *shift.Shift) (status string, lateMi
 		return StatusOnTime, 0
 	}
 	shiftStart := time.Date(now.Year(), now.Month(), now.Day(), startClock.Hour(), startClock.Minute(), 0, 0, now.Location())
+
+	// An overnight shift (e.g. 22:00 -> 06:00) checked into after midnight
+	// actually started the previous calendar day. Without this correction a
+	// graveyard-shift worker arriving 00:30 for a 22:00 start is measured
+	// against *tonight's* 22:00 (still ~21h away) and wrongly recorded
+	// on-time instead of ~2.5h late. We treat "after midnight" as any
+	// check-in whose clock time is at or before the shift's end time.
+	if sh.IsOvernight {
+		if endClock, err := time.Parse("15:04", sh.EndTime); err == nil {
+			nowMinutes := now.Hour()*60 + now.Minute()
+			endMinutes := endClock.Hour()*60 + endClock.Minute()
+			if nowMinutes <= endMinutes {
+				shiftStart = shiftStart.AddDate(0, 0, -1)
+			}
+		}
+	}
 
 	diff := now.Sub(shiftStart)
 	tolerance := time.Duration(sh.LateToleranceMinutes) * time.Minute

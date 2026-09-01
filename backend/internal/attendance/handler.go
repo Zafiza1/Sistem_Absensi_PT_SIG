@@ -144,6 +144,8 @@ func writeError(c *gin.Context, err error) {
 		response.Fail(c, http.StatusForbidden, "Perangkat tidak terdaftar atau tidak aktif", nil)
 	case errors.Is(err, ErrNoShiftAssigned):
 		response.Fail(c, http.StatusUnprocessableEntity, "Karyawan belum memiliki shift atau jadwal", nil)
+	case errors.Is(err, ErrDayOff):
+		response.Fail(c, http.StatusUnprocessableEntity, "Hari ini bukan hari kerja. Absensi tidak diperlukan.", nil)
 	case errors.Is(err, ErrAlreadyCheckedIn):
 		response.Fail(c, http.StatusConflict, "Anda sudah melakukan absensi hari ini", nil)
 	case errors.Is(err, ErrNoOpenCheckIn):

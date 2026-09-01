@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 const HIGHLIGHTS = [
-  { icon: Users, text: "Kelola data karyawan, departemen, dan jabatan" },
+  { icon: Users, text: "Kelola data karyawan, divisi, dan jabatan" },
   { icon: ClipboardCheck, text: "Pantau kehadiran dan laporan secara real-time" },
   { icon: ShieldCheck, text: "Akses berbasis peran — Admin, HR, dan Management" },
 ];

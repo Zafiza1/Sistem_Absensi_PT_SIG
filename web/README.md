@@ -97,9 +97,10 @@ client-side once `loading` resolves with no user.
 |---|---|
 | `/login` | Public. |
 | `/dashboard` | Stat cards (active employees, departments, online devices, today's attendance) computed from existing list endpoints — no dedicated stats endpoint. |
-| `/employees`, `/departments`, `/positions`, `/shifts`, `/schedules`, `/devices` | Full CRUD, gated per `lib/permissions.ts`. Departments/Positions share one component (`components/crud/simple-name-crud.tsx`) since they're shaped identically. |
+| `/employees`, `/departments`, `/positions`, `/shifts`, `/schedules`, `/devices` | Full CRUD, gated per `lib/permissions.ts`. Departments/Positions share one component (`components/crud/simple-name-crud.tsx`) since they're shaped identically. "Departemen" shows as **Divisi** in the UI; the route, API and DB keep the `department` name. |
+| `/company-schedule` | The company-wide default weekly schedule ("Jam Kerja"): one shift (or "Libur") per weekday, applied to every employee. Single `GET`/`PUT /company-schedule` — the whole week is saved at once. `/schedules` is the per-employee exception layer on top of it. |
 | `/attendance` | Read-only history with employee/status/date-range filters. |
-| `/reports` | **Client-side derived**, not a backend report endpoint — the backend deliberately doesn't write an ABSENT row for an employee who never checked in (see root README's Attendance section: "derived ... planned for Phase 6's reporting"). This page cross-references active employees against a day's `/attendance` rows in the browser to fill that gap. Revisit if this needs to scale past a few hundred employees per query. |
+| `/reports` | Two tabs. **Bulanan**: monthly recap from `GET /reports/monthly` (per-employee on-time / late / absent totals) with an **Export Excel** button (`?format=xlsx`, downloaded via `downloadFile()` in `lib/api-client.ts` so the auth header is attached). **Harian**: the original single-day view, still **client-side derived** — cross-references active employees against a day's `/attendance` rows in the browser, since the backend doesn't store ABSENT rows. |
 | `/users` | SUPER_ADMIN only. Create/reset-password show a generated password exactly once (`GeneratedPasswordDialog`) — it's never retrievable again after the dialog closes, matching the backend's one-time-handoff design. |
 | `/audit-logs` | SUPER_ADMIN only, read-only. |
 

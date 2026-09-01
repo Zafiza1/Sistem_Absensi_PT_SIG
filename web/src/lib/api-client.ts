@@ -156,3 +156,40 @@ export const api = {
   put: <T,>(path: string, body?: unknown) => request<T>(path, { method: "PUT", body }),
   delete: <T,>(path: string) => request<T>(path, { method: "DELETE" }),
 };
+
+/**
+ * Fetches a binary endpoint (e.g. an .xlsx export) with the access token
+ * attached and triggers a browser download. Kept separate from `request`,
+ * which assumes the JSON envelope. No silent refresh-retry here: an export
+ * is a deliberate click the user can just repeat if their session lapsed.
+ */
+export async function downloadFile(path: string, query?: RequestOptions["query"]): Promise<void> {
+  const token = tokenStorage.getAccessToken();
+  const res = await fetch(buildUrl(path, query), {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+
+  if (!res.ok) {
+    let message = `Permintaan gagal (${res.status})`;
+    try {
+      const body = await res.json();
+      if (body?.message) message = body.message;
+    } catch {
+      // non-JSON error body — keep the generic message
+    }
+    throw new ApiError(message, res.status);
+  }
+
+  const blob = await res.blob();
+  const disposition = res.headers.get("Content-Disposition") ?? "";
+  const filename = /filename="?([^"]+)"?/.exec(disposition)?.[1] ?? "download";
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}

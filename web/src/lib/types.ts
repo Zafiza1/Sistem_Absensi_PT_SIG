@@ -82,6 +82,17 @@ export interface Employee {
   updated_at: string;
 }
 
+// One weekday in the company-wide default weekly schedule
+// (GET/PUT /company-schedule). shift_id null / is_day_off true means that
+// weekday is a non-working day. A weekday the backend omits entirely is
+// "not configured" — attendance falls back to the employee's own shift.
+export interface CompanyScheduleDay {
+  day_of_week: number; // 1=Monday..7=Sunday
+  shift_id: string | null;
+  shift_name: string;
+  is_day_off: boolean;
+}
+
 export interface WorkSchedule {
   id: string;
   employee_id: string;
@@ -91,6 +102,38 @@ export interface WorkSchedule {
   shift_name: string;
   created_at: string;
   updated_at: string;
+}
+
+// GET /reports/monthly — the aggregated monthly attendance report.
+export type ReportDayStatus = "ON_TIME" | "LATE" | "ABSENT" | "OFF" | "PENDING";
+
+export interface ReportDayCell {
+  day: number; // day of month, 1-based
+  status: ReportDayStatus;
+  late_minutes: number;
+  check_in_at: string | null;
+  check_out_at: string | null;
+}
+
+export interface MonthlyReportEmployee {
+  employee_id: string;
+  employee_number: string;
+  name: string;
+  department_name: string;
+  working_days: number; // elapsed working days = on_time + late_count + absent
+  on_time: number;
+  late_count: number;
+  late_minutes: number; // total for the month
+  absent: number;
+  days: ReportDayCell[];
+}
+
+export interface MonthlyReport {
+  year: number;
+  month: number; // 1-12
+  days_in_month: number;
+  generated_at: string;
+  employees: MonthlyReportEmployee[];
 }
 
 export type DeviceStatus = "ACTIVE" | "INACTIVE";
