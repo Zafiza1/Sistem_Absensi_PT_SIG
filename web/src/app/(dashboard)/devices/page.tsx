@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { MoreHorizontal, Plus, Circle } from "lucide-react";
+import { MoreHorizontal, Plus, Circle, Tablet } from "lucide-react";
 import { toast } from "sonner";
 
 import { api, ApiError } from "@/lib/api-client";
@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/page-header";
 import { DataTablePagination } from "@/components/data-table-pagination";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
+import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -158,8 +159,12 @@ export default function DevicesPage() {
             )}
             {!loading && !error && items.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
-                  Belum ada perangkat terdaftar
+                <TableCell colSpan={7}>
+                  <EmptyState
+                    icon={Tablet}
+                    title="Belum ada perangkat terdaftar"
+                    description={writable ? "Daftarkan tablet absensi pertama untuk mulai mencatat kehadiran." : undefined}
+                  />
                 </TableCell>
               </TableRow>
             )}
@@ -171,10 +176,15 @@ export default function DevicesPage() {
                   <TableCell className="font-mono text-sm">{device.device_code}</TableCell>
                   <TableCell className="text-muted-foreground">{device.location || "-"}</TableCell>
                   <TableCell>
-                    <span className="flex items-center gap-1.5 text-sm">
-                      <Circle
-                        className={cn("size-2 fill-current", device.is_online ? "text-green-500" : "text-muted-foreground")}
-                      />
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium",
+                        device.is_online
+                          ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400"
+                          : "bg-muted text-muted-foreground",
+                      )}
+                    >
+                      <Circle className="size-1.5 fill-current" />
                       {device.is_online ? "Online" : "Offline"}
                     </span>
                   </TableCell>

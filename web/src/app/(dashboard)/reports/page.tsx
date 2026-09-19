@@ -1,15 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Download } from "lucide-react";
+import { Download, CheckCircle2, Clock, Timer, UserX, LogOut, Users } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 
+import { cn } from "@/lib/utils";
 import { api, ApiError, downloadFile } from "@/lib/api-client";
 import { useOptionsList } from "@/hooks/use-options-list";
 import type { Attendance, Department, Employee, ListResponse, MonthlyReport } from "@/lib/types";
 
 import { PageHeader } from "@/components/page-header";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyState } from "@/components/empty-state";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,6 +23,41 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const ALL_DEPARTMENTS = "__all__";
+
+type StatTone = "green" | "amber" | "rose" | "blue";
+
+const STAT_TONE_CLASSES: Record<StatTone, string> = {
+  blue: "bg-primary/10 text-primary dark:bg-primary/20 dark:text-sky-400",
+  green: "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400",
+  amber: "bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400",
+  rose: "bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400",
+};
+
+function StatTile({
+  label,
+  value,
+  icon: Icon,
+  tone,
+  loading,
+}: {
+  label: string;
+  value: number | undefined;
+  icon: LucideIcon;
+  tone: StatTone;
+  loading: boolean;
+}) {
+  return (
+    <Card className="flex-row items-center gap-3 p-4">
+      <div className={cn("flex size-10 shrink-0 items-center justify-center rounded-lg", STAT_TONE_CLASSES[tone])}>
+        <Icon className="size-5" />
+      </div>
+      <div>
+        <p className="text-xs text-muted-foreground">{label}</p>
+        {loading ? <Skeleton className="mt-1 h-6 w-10" /> : <p className="text-xl font-semibold tracking-tight">{value ?? 0}</p>}
+      </div>
+    </Card>
+  );
+}
 
 export default function ReportsPage() {
   const [mode, setMode] = useState("bulanan");
@@ -107,11 +145,11 @@ function MonthlyReportView() {
     { on_time: 0, late_count: 0, late_minutes: 0, absent: 0 },
   );
 
-  const cards: { label: string; value: number | undefined }[] = [
-    { label: "Tepat Waktu", value: totals?.on_time },
-    { label: "Terlambat (kali)", value: totals?.late_count },
-    { label: "Total Menit Terlambat", value: totals?.late_minutes },
-    { label: "Tidak Hadir", value: totals?.absent },
+  const cards: { label: string; value: number | undefined; icon: LucideIcon; tone: StatTone }[] = [
+    { label: "Tepat Waktu", value: totals?.on_time, icon: CheckCircle2, tone: "green" },
+    { label: "Terlambat (kali)", value: totals?.late_count, icon: Clock, tone: "amber" },
+    { label: "Total Menit Terlambat", value: totals?.late_minutes, icon: Timer, tone: "amber" },
+    { label: "Tidak Hadir", value: totals?.absent, icon: UserX, tone: "rose" },
   ];
 
   return (
@@ -154,14 +192,7 @@ function MonthlyReportView() {
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {cards.map((c) => (
-          <Card key={c.label}>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">{c.label}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {loading ? <Skeleton className="h-8 w-12" /> : <div className="text-2xl font-bold">{c.value ?? 0}</div>}
-            </CardContent>
-          </Card>
+          <StatTile key={c.label} label={c.label} value={c.value} icon={c.icon} tone={c.tone} loading={loading} />
         ))}
       </div>
 
@@ -197,8 +228,8 @@ function MonthlyReportView() {
             )}
             {!loading && !error && report?.employees.length === 0 && (
               <TableRow>
-                <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
-                  Tidak ada karyawan untuk filter ini
+                <TableCell colSpan={8}>
+                  <EmptyState icon={Users} title="Tidak ada karyawan untuk filter ini" description="Coba ubah bulan atau divisi yang dipilih." />
                 </TableCell>
               </TableRow>
             )}
@@ -368,15 +399,15 @@ function DailyReportView() {
       </div>
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {(["ON_TIME", "LATE", "CHECKED_OUT", "ABSENT"] as const).map((key) => (
-          <Card key={key}>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">{STATUS_LABELS[key]}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {loading ? <Skeleton className="h-8 w-12" /> : <div className="text-2xl font-bold">{summary?.[key] ?? 0}</div>}
-            </CardContent>
-          </Card>
+        {(
+          [
+            { key: "ON_TIME", icon: CheckCircle2, tone: "green" },
+            { key: "LATE", icon: Clock, tone: "amber" },
+            { key: "CHECKED_OUT", icon: LogOut, tone: "blue" },
+            { key: "ABSENT", icon: UserX, tone: "rose" },
+          ] as const
+        ).map(({ key, icon, tone }) => (
+          <StatTile key={key} label={STATUS_LABELS[key]} value={summary?.[key]} icon={icon} tone={tone} loading={loading} />
         ))}
       </div>
 
@@ -410,8 +441,8 @@ function DailyReportView() {
             )}
             {!loading && !error && rows?.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
-                  Tidak ada karyawan untuk filter ini
+                <TableCell colSpan={6}>
+                  <EmptyState icon={Users} title="Tidak ada karyawan untuk filter ini" description="Coba ubah tanggal atau divisi yang dipilih." />
                 </TableCell>
               </TableRow>
             )}

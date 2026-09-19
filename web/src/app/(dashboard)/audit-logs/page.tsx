@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ScrollText } from "lucide-react";
 
 import { usePaginatedList } from "@/hooks/use-paginated-list";
 import { useOptionsList } from "@/hooks/use-options-list";
@@ -9,6 +10,7 @@ import type { AuditAction, AuditLogEntry, DashboardUser } from "@/lib/types";
 import { RequireRole } from "@/components/require-role";
 import { PageHeader } from "@/components/page-header";
 import { DataTablePagination } from "@/components/data-table-pagination";
+import { EmptyState } from "@/components/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -148,8 +150,8 @@ function AuditLogsPageContent() {
             )}
             {!loading && !error && items.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
-                  Tidak ada aktivitas untuk filter ini
+                <TableCell colSpan={5}>
+                  <EmptyState icon={ScrollText} title="Tidak ada aktivitas untuk filter ini" description="Coba ubah rentang tanggal atau filter lainnya." />
                 </TableCell>
               </TableRow>
             )}

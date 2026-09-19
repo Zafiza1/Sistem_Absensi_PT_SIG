@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { api, ApiError } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { canWrite } from "@/lib/permissions";
+import { cn } from "@/lib/utils";
 import { useOptionsList } from "@/hooks/use-options-list";
 import type { CompanyScheduleDay, Shift } from "@/lib/types";
 
@@ -119,9 +120,24 @@ export default function CompanySchedulePage() {
               [OFF]: "Libur",
               ...Object.fromEntries(shifts.map((s) => [s.id, `${s.name} (${s.start_time}-${s.end_time})`])),
             };
+            const isOff = rows[d.value] === OFF;
             return (
               <div key={d.value} className="flex items-center justify-between gap-4 p-4">
-                <span className="text-sm font-medium">{d.label}</span>
+                <div className="flex items-center gap-3">
+                  <div
+                    className={cn(
+                      "flex size-9 shrink-0 items-center justify-center rounded-lg text-xs font-semibold uppercase",
+                      isOff ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary",
+                    )}
+                    aria-hidden
+                  >
+                    {d.label.slice(0, 3)}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">{d.label}</p>
+                    <p className="text-xs text-muted-foreground">{isOff ? "Hari libur" : "Hari kerja"}</p>
+                  </div>
+                </div>
                 <Select
                   items={items}
                   value={rows[d.value]}

@@ -1,7 +1,17 @@
+"use client";
+
+import { Briefcase } from "lucide-react";
+
 import { SimpleNameCrud } from "@/components/crud/simple-name-crud";
 
 export default function PositionsPage() {
   return (
-    <SimpleNameCrud resource="positions" endpoint="/positions" singularLabel="Jabatan" pluralLabel="Jabatan" />
+    <SimpleNameCrud
+      resource="positions"
+      endpoint="/positions"
+      singularLabel="Jabatan"
+      pluralLabel="Jabatan"
+      icon={Briefcase}
+    />
   );
 }

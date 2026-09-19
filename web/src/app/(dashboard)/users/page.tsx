@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { MoreHorizontal, Plus, Copy, Check } from "lucide-react";
+import { MoreHorizontal, Plus, Copy, Check, UserCog } from "lucide-react";
 import { toast } from "sonner";
 
 import { api, ApiError } from "@/lib/api-client";
@@ -12,6 +12,7 @@ import { RequireRole } from "@/components/require-role";
 import { PageHeader } from "@/components/page-header";
 import { DataTablePagination } from "@/components/data-table-pagination";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
+import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -208,6 +209,13 @@ function UsersPageContent() {
               <TableRow>
                 <TableCell colSpan={5} className="py-8 text-center text-destructive">
                   {error}
+                </TableCell>
+              </TableRow>
+            )}
+            {!loading && !error && items.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={5}>
+                  <EmptyState icon={UserCog} title="Belum ada akun dashboard" description="Tambahkan akun untuk Admin, HR, atau Management." />
                 </TableCell>
               </TableRow>
             )}

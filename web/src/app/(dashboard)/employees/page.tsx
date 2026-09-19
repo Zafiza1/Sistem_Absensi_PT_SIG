@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { MoreHorizontal, Plus, Search } from "lucide-react";
+import { MoreHorizontal, Plus, Search, Users } from "lucide-react";
 import { toast } from "sonner";
 
 import { api, ApiError } from "@/lib/api-client";
@@ -14,6 +14,7 @@ import type { Department, Employee, Position, Shift } from "@/lib/types";
 import { PageHeader } from "@/components/page-header";
 import { DataTablePagination } from "@/components/data-table-pagination";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
+import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -198,8 +199,12 @@ export default function EmployeesPage() {
             )}
             {!loading && !error && items.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
-                  Tidak ada karyawan ditemukan
+                <TableCell colSpan={7}>
+                  <EmptyState
+                    icon={Users}
+                    title="Tidak ada karyawan ditemukan"
+                    description={search ? "Coba kata kunci pencarian lain." : "Mulai dengan menambahkan karyawan pertama."}
+                  />
                 </TableCell>
               </TableRow>
             )}

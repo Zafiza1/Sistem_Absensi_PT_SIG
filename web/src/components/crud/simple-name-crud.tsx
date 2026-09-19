@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { MoreHorizontal, Plus } from "lucide-react";
+import { MoreHorizontal, Plus, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { api, ApiError } from "@/lib/api-client";
@@ -12,6 +12,7 @@ import { usePaginatedList } from "@/hooks/use-paginated-list";
 import { PageHeader } from "@/components/page-header";
 import { DataTablePagination } from "@/components/data-table-pagination";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
+import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -54,11 +55,13 @@ export function SimpleNameCrud({
   endpoint,
   singularLabel,
   pluralLabel,
+  icon,
 }: {
   resource: WritableResource;
   endpoint: string;
   singularLabel: string;
   pluralLabel: string;
+  icon: LucideIcon;
 }) {
   const { user } = useAuth();
   const writable = canWrite(resource, user?.role);
@@ -165,8 +168,12 @@ export function SimpleNameCrud({
             )}
             {!loading && !error && items.length === 0 && (
               <TableRow>
-                <TableCell colSpan={writable ? 4 : 3} className="py-8 text-center text-muted-foreground">
-                  Belum ada data {pluralLabel.toLowerCase()}
+                <TableCell colSpan={writable ? 4 : 3}>
+                  <EmptyState
+                    icon={icon}
+                    title={`Belum ada data ${pluralLabel.toLowerCase()}`}
+                    description={writable ? `Mulai dengan menambahkan ${singularLabel.toLowerCase()} pertama.` : undefined}
+                  />
                 </TableCell>
               </TableRow>
             )}

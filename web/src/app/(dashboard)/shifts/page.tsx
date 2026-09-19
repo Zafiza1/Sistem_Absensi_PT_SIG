@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { MoreHorizontal, Plus } from "lucide-react";
+import { MoreHorizontal, Plus, Clock } from "lucide-react";
 import { toast } from "sonner";
 
 import { api, ApiError } from "@/lib/api-client";
@@ -13,6 +13,7 @@ import type { Shift } from "@/lib/types";
 import { PageHeader } from "@/components/page-header";
 import { DataTablePagination } from "@/components/data-table-pagination";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
+import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -166,8 +167,12 @@ export default function ShiftsPage() {
             )}
             {!loading && !error && items.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
-                  Belum ada data shift
+                <TableCell colSpan={6}>
+                  <EmptyState
+                    icon={Clock}
+                    title="Belum ada data shift"
+                    description={writable ? "Tambahkan shift untuk dipakai di Jam Kerja dan Jadwal Kerja." : undefined}
+                  />
                 </TableCell>
               </TableRow>
             )}

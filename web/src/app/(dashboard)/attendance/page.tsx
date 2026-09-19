@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ClipboardList } from "lucide-react";
 
 import { usePaginatedList } from "@/hooks/use-paginated-list";
 import { useOptionsList } from "@/hooks/use-options-list";
@@ -8,6 +9,7 @@ import type { Attendance, AttendanceStatus, Employee } from "@/lib/types";
 
 import { PageHeader } from "@/components/page-header";
 import { DataTablePagination } from "@/components/data-table-pagination";
+import { EmptyState } from "@/components/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -150,8 +152,8 @@ export default function AttendancePage() {
             )}
             {!loading && !error && items.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
-                  Tidak ada data absensi untuk filter ini
+                <TableCell colSpan={7}>
+                  <EmptyState icon={ClipboardList} title="Tidak ada data absensi untuk filter ini" description="Coba ubah rentang tanggal atau filter lainnya." />
                 </TableCell>
               </TableRow>
             )}
