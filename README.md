@@ -189,6 +189,10 @@ Base path: `/api/v1` (versioned from the start). Currently implemented:
 | POST | `/api/v1/attendance/check-out` | **Device code**, no JWT | Tablet check-out |
 | GET | `/api/v1/attendance`, `/attendance/{id}` | Bearer | Attendance history (dashboard) |
 | GET | `/api/v1/reports/monthly` | Bearer | Monthly attendance report (JSON, or `.xlsx` with `?format=xlsx`) |
+| GET/POST | `/api/v1/leaves` | Bearer (+ Admin/HR for write) | Cuti tahunan (annual leave) records — 12 days/year quota, see Payroll rules below |
+| GET | `/api/v1/leaves/balance?employee_id=&year=` | Bearer | Remaining annual leave days for an employee |
+| GET/DELETE | `/api/v1/leaves/{id}` | Bearer (+ Admin/HR for delete) | Detail / cancel a leave record |
+| GET | `/api/v1/payroll/monthly?year=&month=&department_id=` | Bearer, Admin/HR | Monthly late-arrival deduction report — see Payroll rules below |
 | GET/POST/PUT/DELETE | `/api/v1/users`, `/users/{id}` | Bearer, **SUPER_ADMIN only** | Dashboard account management (Phase 6) |
 | POST | `/api/v1/users/{id}/reset-password` | Bearer, SUPER_ADMIN only | Issues a new one-time generated password |
 | GET | `/api/v1/audit-logs` | Bearer, SUPER_ADMIN only | Read-only audit trail (Phase 6) |
@@ -354,6 +358,29 @@ overwritten, so "was this person late that day" is read from
 > network, but should sit behind additional network controls (VPN/firewall
 > to that network) before ever being reachable from the public internet —
 > see Phase 8's deployment notes once written.
+
+### Payroll rules (`internal/leave`, `internal/payroll`)
+
+Not part of the phased spec above — added on top of it as company payroll
+policy:
+
+- **Cuti tahunan (annual leave):** 12 paid days per employee per calendar
+  year. HR/Admin records a leave period (`POST /api/v1/leaves`); the
+  service rejects a request that would push the employee's `ACTIVE` days
+  for that year past 12 (`leave.AnnualQuotaDays`). Cancelling
+  (`DELETE /api/v1/leaves/{id}`) frees the days back up without deleting
+  the record. There is no employee self-service flow — same posture as
+  employee/device master data.
+- **Late-arrival deductions**, computed per attendance day from
+  `attendances.late_minutes` and the employee's `base_salary` ("Gaji
+  Pokok"): 1–10 minutes late → flat Rp 20,000; 11–30 minutes → flat
+  Rp 50,000; 31+ minutes → half a day's pay (`base_salary / 26 / 2`). See
+  `payroll.ComputeLateDeduction`'s doc comment for what the 31+ tier does
+  and doesn't cover.
+- `GET /api/v1/payroll/monthly?year=&month=&department_id=` (Admin/HR
+  only — it reads `base_salary`) returns, per active employee, the
+  month's late-day count, total deduction, resulting net salary, and
+  annual leave used/remaining.
 
 ### User management & audit trail (Phase 6 backend support)
 

@@ -9,7 +9,6 @@ import { useAuth } from "@/lib/auth-context";
 import { ROLE_LABELS } from "@/lib/types";
 import type { Attendance, Department, Device, Employee, ListResponse } from "@/lib/types";
 
-import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -46,7 +45,7 @@ function StatCard({
   tone: "blue" | "green" | "amber" | "violet";
 }) {
   const toneClasses: Record<typeof tone, string> = {
-    blue: "bg-sky-50 text-sky-600 dark:bg-sky-500/10 dark:text-sky-400",
+    blue: "bg-primary/10 text-primary dark:bg-primary/20 dark:text-sky-400",
     green: "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400",
     amber: "bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400",
     violet: "bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-violet-400",
@@ -122,11 +121,40 @@ export default function DashboardHomePage() {
 
   return (
     <div>
-      {/* Full name, not a first-name split: dashboard accounts are often
-          role-style names ("Super Admin PT SIG"), not personal "First
-          Last" names, so splitting on the first space would cut those
-          off mid-title instead of shortening them meaningfully. */}
-      <PageHeader title={`Selamat datang, ${user?.name ?? ""}`} description="Ringkasan sistem absensi hari ini" />
+      {/* Navy hero banner — echoes the login page's brand panel and the
+          Flutter kiosk's dark theme, so the landing page reads as this
+          product's own chrome instead of a generic light admin template. */}
+      <div className="relative mb-6 overflow-hidden rounded-xl bg-sidebar px-6 py-7 text-white">
+        <div
+          className="pointer-events-none absolute inset-0 opacity-40"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle at 12% 25%, rgba(56,189,248,0.25), transparent 45%), radial-gradient(circle at 88% 85%, rgba(56,189,248,0.15), transparent 40%)",
+          }}
+          aria-hidden
+        />
+        <div className="relative flex flex-wrap items-center justify-between gap-4">
+          <div>
+            {/* Full name, not a first-name split: dashboard accounts are
+                often role-style names ("Super Admin PT SIG"), not personal
+                "First Last" names, so splitting on the first space would
+                cut those off mid-title instead of shortening them
+                meaningfully. */}
+            <h1 className="text-2xl font-semibold tracking-tight text-balance">
+              Selamat datang, {user?.name ?? ""}
+            </h1>
+            <p className="mt-1 text-sm text-slate-300">Ringkasan sistem absensi hari ini</p>
+          </div>
+          {user && (
+            <div className="flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-sm">
+              <span className="text-slate-300">{user.email}</span>
+              <Badge className="border-sky-400/30 bg-sky-400/15 text-sky-300" variant="outline">
+                {ROLE_LABELS[user.role]}
+              </Badge>
+            </div>
+          )}
+        </div>
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
@@ -163,15 +191,6 @@ export default function DashboardHomePage() {
           tone="green"
         />
       </div>
-
-      <Card className="mt-6">
-        <CardContent className="flex flex-wrap items-center gap-x-6 gap-y-2">
-          <p className="text-sm text-muted-foreground">Masuk sebagai</p>
-          <p className="text-sm font-medium">{user?.name}</p>
-          <p className="text-sm text-muted-foreground">{user?.email}</p>
-          {user && <Badge variant="outline">{ROLE_LABELS[user.role]}</Badge>}
-        </CardContent>
-      </Card>
     </div>
   );
 }

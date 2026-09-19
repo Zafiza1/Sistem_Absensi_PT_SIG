@@ -25,9 +25,12 @@ type Employee struct {
 	PositionID     *uuid.UUID
 	ShiftID        *uuid.UUID
 	Status         string
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
-	DeletedAt      *time.Time
+	// BaseSalary is "Gaji Pokok" in whole Rupiah, used by internal/payroll
+	// to compute late-arrival deductions.
+	BaseSalary int64
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+	DeletedAt  *time.Time
 
 	// Denormalized display names, populated by List/FindByID via a JOIN so
 	// the dashboard doesn't need three extra round-trips per row. Empty

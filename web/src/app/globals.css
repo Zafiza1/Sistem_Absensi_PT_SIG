@@ -56,6 +56,10 @@
  * an enterprise HR/admin data-entry tool better than the tablet's dark
  * kiosk theme: this is read at a desk during work hours, not a
  * camera-lit kiosk where dark reduces glare.
+ *
+ * --primary is the same deep navy as --sidebar (#0f172a family, not a
+ * generic Tailwind "blue-600") so buttons, links, and focus rings read as
+ * this brand's navy rather than a stock admin-template blue.
  */
 :root {
   --background: #f8fafc;
@@ -64,7 +68,7 @@
   --card-foreground: #0f172a;
   --popover: #ffffff;
   --popover-foreground: #0f172a;
-  --primary: #0369a1;
+  --primary: #0f3a67;
   --primary-foreground: #ffffff;
   --secondary: #f1f5f9;
   --secondary-foreground: #0f172a;
@@ -75,8 +79,8 @@
   --destructive: #dc2626;
   --border: #e2e8f0;
   --input: #e2e8f0;
-  --ring: #0369a1;
-  --chart-1: #0369a1;
+  --ring: #0f3a67;
+  --chart-1: #0f3a67;
   --chart-2: #16a34a;
   --chart-3: #d97706;
   --chart-4: #dc2626;

@@ -19,6 +19,7 @@ type Input struct {
 	PositionID     *uuid.UUID
 	ShiftID        *uuid.UUID
 	Status         string
+	BaseSalary     int64
 }
 
 // Actor identifies who is performing a mutation, for the audit trail. It
@@ -49,6 +50,7 @@ func (s *Service) Create(ctx context.Context, actor Actor, in Input) (*Employee,
 		PositionID:     in.PositionID,
 		ShiftID:        in.ShiftID,
 		Status:         status,
+		BaseSalary:     in.BaseSalary,
 	}
 	if err := s.repo.Create(ctx, e); err != nil {
 		return nil, err
@@ -82,6 +84,7 @@ func (s *Service) Update(ctx context.Context, actor Actor, id uuid.UUID, in Inpu
 		PositionID:     in.PositionID,
 		ShiftID:        in.ShiftID,
 		Status:         status,
+		BaseSalary:     in.BaseSalary,
 	}
 	if err := s.repo.Update(ctx, e); err != nil {
 		return nil, err

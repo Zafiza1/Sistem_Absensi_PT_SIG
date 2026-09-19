@@ -37,35 +37,45 @@ export function Topbar() {
   )?.label;
 
   return (
-    <header className="flex h-14 shrink-0 items-center gap-3 border-b bg-background px-4 md:px-6">
+    <header className="flex h-14 shrink-0 items-center gap-3 border-b border-sidebar-border bg-sidebar px-4 text-sidebar-foreground md:px-6">
       <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
         <SheetContent side="left" className="w-64 border-none p-0">
           <SheetTitle className="sr-only">Menu navigasi</SheetTitle>
           <SidebarNav onNavigate={() => setMobileNavOpen(false)} />
         </SheetContent>
       </Sheet>
-      <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setMobileNavOpen(true)}>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="text-sidebar-foreground hover:bg-sidebar-accent hover:text-white md:hidden"
+        onClick={() => setMobileNavOpen(true)}
+      >
         <Menu className="size-5" />
         <span className="sr-only">Buka menu</span>
       </Button>
 
-      {currentLabel && <h2 className="hidden text-sm font-semibold text-foreground md:block">{currentLabel}</h2>}
+      {currentLabel && <h2 className="hidden text-sm font-semibold text-white md:block">{currentLabel}</h2>}
 
       <div className="flex-1" />
 
       {user && (
         <DropdownMenu>
           <DropdownMenuTrigger
-            render={<Button variant="ghost" className="flex h-auto items-center gap-2 px-2 py-1.5" />}
+            render={
+              <Button
+                variant="ghost"
+                className="flex h-auto items-center gap-2 px-2 py-1.5 text-sidebar-foreground hover:bg-sidebar-accent hover:text-white"
+              />
+            }
           >
-            <Avatar className="size-7 border border-border">
-              <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">
+            <Avatar className="size-7 border border-sidebar-border">
+              <AvatarFallback className="bg-sidebar-primary/20 text-xs font-semibold text-sidebar-primary">
                 {initials(user.name)}
               </AvatarFallback>
             </Avatar>
             <span className="hidden text-left leading-tight sm:block">
-              <span className="block text-sm font-medium">{user.name}</span>
-              <span className="block text-xs text-muted-foreground">{ROLE_LABELS[user.role]}</span>
+              <span className="block text-sm font-medium text-white">{user.name}</span>
+              <span className="block text-xs text-sidebar-foreground/70">{ROLE_LABELS[user.role]}</span>
             </span>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">

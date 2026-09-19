@@ -51,7 +51,7 @@ func NewPostgresRepository(db *pgxpool.Pool) *PostgresRepository {
 // instead, producing invalid SQL.
 const employeeColumns = `
 	e.id, e.employee_number, e.name, e.email, e.phone,
-	e.department_id, e.position_id, e.shift_id, e.status,
+	e.department_id, e.position_id, e.shift_id, e.status, e.base_salary,
 	e.created_at, e.updated_at, e.deleted_at,
 	COALESCE(d.name, ''), COALESCE(p.name, ''), COALESCE(s.name, '')`
 
@@ -66,7 +66,7 @@ const baseSelect = "SELECT " + employeeColumns + employeeFrom
 func scanEmployee(row pgx.Row, e *Employee) error {
 	return row.Scan(
 		&e.ID, &e.EmployeeNumber, &e.Name, &e.Email, &e.Phone,
-		&e.DepartmentID, &e.PositionID, &e.ShiftID, &e.Status,
+		&e.DepartmentID, &e.PositionID, &e.ShiftID, &e.Status, &e.BaseSalary,
 		&e.CreatedAt, &e.UpdatedAt, &e.DeletedAt,
 		&e.DepartmentName, &e.PositionName, &e.ShiftName,
 	)
@@ -74,11 +74,11 @@ func scanEmployee(row pgx.Row, e *Employee) error {
 
 func (r *PostgresRepository) Create(ctx context.Context, e *Employee) error {
 	const q = `
-		INSERT INTO employees (employee_number, name, email, phone, department_id, position_id, shift_id, status)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO employees (employee_number, name, email, phone, department_id, position_id, shift_id, status, base_salary)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING id, created_at, updated_at`
 
-	err := r.db.QueryRow(ctx, q, e.EmployeeNumber, e.Name, e.Email, e.Phone, e.DepartmentID, e.PositionID, e.ShiftID, e.Status).
+	err := r.db.QueryRow(ctx, q, e.EmployeeNumber, e.Name, e.Email, e.Phone, e.DepartmentID, e.PositionID, e.ShiftID, e.Status, e.BaseSalary).
 		Scan(&e.ID, &e.CreatedAt, &e.UpdatedAt)
 	if dberr.IsUniqueViolation(err) {
 		return classifyUniqueViolation(err)
@@ -158,7 +158,7 @@ func (r *PostgresRepository) List(ctx context.Context, f Filter, p pagination.Pa
 		var e Employee
 		if err := rows.Scan(
 			&e.ID, &e.EmployeeNumber, &e.Name, &e.Email, &e.Phone,
-			&e.DepartmentID, &e.PositionID, &e.ShiftID, &e.Status,
+			&e.DepartmentID, &e.PositionID, &e.ShiftID, &e.Status, &e.BaseSalary,
 			&e.CreatedAt, &e.UpdatedAt, &e.DeletedAt,
 			&e.DepartmentName, &e.PositionName, &e.ShiftName, &total,
 		); err != nil {
@@ -176,12 +176,13 @@ func (r *PostgresRepository) Update(ctx context.Context, e *Employee) error {
 	const q = `
 		UPDATE employees
 		SET employee_number = $1, name = $2, email = $3, phone = $4,
-		    department_id = $5, position_id = $6, shift_id = $7, status = $8
-		WHERE id = $9 AND deleted_at IS NULL
+		    department_id = $5, position_id = $6, shift_id = $7, status = $8,
+		    base_salary = $9
+		WHERE id = $10 AND deleted_at IS NULL
 		RETURNING updated_at`
 
 	err := r.db.QueryRow(ctx, q, e.EmployeeNumber, e.Name, e.Email, e.Phone,
-		e.DepartmentID, e.PositionID, e.ShiftID, e.Status, e.ID).
+		e.DepartmentID, e.PositionID, e.ShiftID, e.Status, e.BaseSalary, e.ID).
 		Scan(&e.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound

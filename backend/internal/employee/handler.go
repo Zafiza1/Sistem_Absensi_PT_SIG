@@ -23,6 +23,7 @@ type CreateRequest struct {
 	DepartmentID   *uuid.UUID `json:"department_id"`
 	PositionID     *uuid.UUID `json:"position_id"`
 	ShiftID        *uuid.UUID `json:"shift_id"`
+	BaseSalary     int64      `json:"base_salary" validate:"omitempty,min=0"`
 }
 
 type UpdateRequest struct {
@@ -68,6 +69,7 @@ func (h *Handler) Create(c *gin.Context) {
 		DepartmentID:   req.DepartmentID,
 		PositionID:     req.PositionID,
 		ShiftID:        req.ShiftID,
+		BaseSalary:     req.BaseSalary,
 	})
 	if err != nil {
 		writeError(c, err)
@@ -148,6 +150,7 @@ func (h *Handler) Update(c *gin.Context) {
 		PositionID:     req.PositionID,
 		ShiftID:        req.ShiftID,
 		Status:         req.Status,
+		BaseSalary:     req.BaseSalary,
 	})
 	if err != nil {
 		writeError(c, err)
@@ -201,6 +204,7 @@ func toData(e *Employee) gin.H {
 		"shift_id":        e.ShiftID,
 		"shift_name":      e.ShiftName,
 		"status":          e.Status,
+		"base_salary":     e.BaseSalary,
 		"created_at":      e.CreatedAt,
 		"updated_at":      e.UpdatedAt,
 	}

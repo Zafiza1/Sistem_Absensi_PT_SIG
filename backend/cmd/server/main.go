@@ -25,7 +25,9 @@ import (
 	"github.com/suryaintigas/absensi-backend/internal/employee"
 	"github.com/suryaintigas/absensi-backend/internal/faceprofile"
 	"github.com/suryaintigas/absensi-backend/internal/health"
+	"github.com/suryaintigas/absensi-backend/internal/leave"
 	"github.com/suryaintigas/absensi-backend/internal/middleware"
+	"github.com/suryaintigas/absensi-backend/internal/payroll"
 	"github.com/suryaintigas/absensi-backend/internal/position"
 	"github.com/suryaintigas/absensi-backend/internal/report"
 	"github.com/suryaintigas/absensi-backend/internal/schedule"
@@ -242,6 +244,26 @@ func main() {
 	// (see internal/report's package doc); ?format=xlsx returns a download.
 	reportHandler := report.NewHandler(report.NewService(report.NewPostgresRepository(pool)))
 	authed.GET("/reports/monthly", reportHandler.Monthly)
+
+	// --- Payroll rules: annual leave + late-arrival deductions -------------
+	// Cuti (annual leave) is recorded by HR/Admin, same posture as employee
+	// master data — see internal/leave's package doc. Reads are open to any
+	// authenticated role like other master data; mutations are adminOrHR.
+	leaveHandler := leave.NewHandler(leave.NewService(leave.NewPostgresRepository(pool), auditService))
+	leaveGroup := authed.Group("/leaves")
+	{
+		leaveGroup.GET("", leaveHandler.List)
+		leaveGroup.GET("/balance", leaveHandler.Balance)
+		leaveGroup.GET("/:id", leaveHandler.Get)
+		leaveGroup.POST("", adminOrHR, leaveHandler.Create)
+		leaveGroup.DELETE("/:id", adminOrHR, leaveHandler.Delete)
+	}
+
+	// Payroll deduction report reads employees.base_salary directly, so
+	// (unlike the reports above) it's restricted to adminOrHR rather than
+	// open to every authenticated role.
+	payrollHandler := payroll.NewHandler(payroll.NewService(payroll.NewPostgresRepository(pool)))
+	authed.GET("/payroll/monthly", adminOrHR, payrollHandler.Monthly)
 
 	// --- Phase 6 support: dashboard account management + audit trail -------
 	// User management is deliberately SUPER_ADMIN-only (not adminOnly): an
