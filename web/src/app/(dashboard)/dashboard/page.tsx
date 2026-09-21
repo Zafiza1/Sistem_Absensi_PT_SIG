@@ -3,36 +3,39 @@
 import { useEffect, useState } from "react";
 import {
   Users,
-  Building2,
-  Tablet,
-  ArrowRight,
-  ChevronRight,
-  Clock,
-  WifiOff,
   CheckCircle2,
+  Clock,
+  XCircle,
+  Tablet,
+  WifiOff,
+  ArrowRight,
 } from "lucide-react";
 import Link from "next/link";
 
 import { api } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
-import { ROLE_LABELS } from "@/lib/types";
-import type { Attendance, AttendanceStatus, Department, Device, Employee, ListResponse } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import type { Attendance, AttendanceStatus, Device, Employee, ListResponse } from "@/lib/types";
 
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { StatCard } from "@/components/dashboard/stat-card";
+import { AttendanceTrendChart, type TrendPoint } from "@/components/dashboard/attendance-trend-chart";
+import { AttendanceDonut, type DonutSegment } from "@/components/dashboard/attendance-donut";
+import { LiveClock } from "@/components/dashboard/live-clock";
 
 interface DashboardData {
+  totalEmployees: number;
   activeEmployees: number;
-  departments: number;
   devices: Device[];
   attendanceToday: Attendance[];
+  weekAttendance: Attendance[];
 }
 
 const STATUS_LABELS: Record<AttendanceStatus, string> = {
-  ON_TIME: "Tepat Waktu",
+  ON_TIME: "Hadir",
   LATE: "Terlambat",
   CHECKED_OUT: "Selesai",
   ABSENT: "Tidak Hadir",
@@ -41,6 +44,12 @@ const STATUS_LABELS: Record<AttendanceStatus, string> = {
 
 function todayIso(): string {
   return new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD in local time
+}
+
+function isoDaysAgo(n: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d.toLocaleDateString("en-CA");
 }
 
 function initials(name: string): string {
@@ -63,49 +72,28 @@ function isLate(a: Attendance): boolean {
   return a.status === "LATE" || (a.status === "CHECKED_OUT" && a.late_minutes > 0);
 }
 
-function MiniStat({
-  label,
-  value,
-  icon: Icon,
-  loading,
-  href,
-  tone,
-  hint,
-}: {
-  label: string;
-  value: string;
-  icon: React.ComponentType<{ className?: string }>;
-  loading: boolean;
-  href: string;
-  tone: "blue" | "amber" | "violet";
-  hint?: string;
-}) {
-  const toneClasses: Record<typeof tone, string> = {
-    blue: "bg-primary/10 text-primary dark:bg-primary/20 dark:text-sky-400",
-    amber: "bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400",
-    violet: "bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-violet-400",
-  };
-
-  return (
-    <Link
-      href={href}
-      className="group flex items-center gap-3 rounded-lg px-3 py-3 transition-colors hover:bg-accent"
-    >
-      <div className={cn("flex size-9 shrink-0 items-center justify-center rounded-lg", toneClasses[tone])}>
-        <Icon className="size-4.5" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-xs text-muted-foreground">{label}</p>
-        {loading ? (
-          <Skeleton className="mt-1 h-5 w-12" />
-        ) : (
-          <p className="text-lg leading-tight font-semibold tracking-tight">{value}</p>
-        )}
-        {hint && !loading && <p className="truncate text-xs text-muted-foreground">{hint}</p>}
-      </div>
-      <ChevronRight className="size-4 shrink-0 text-muted-foreground/50 transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
-    </Link>
-  );
+// Loops the shared page/page_size envelope (backend/pkg/pagination, capped
+// at 100/page) until every row in the date range is collected — a week of
+// attendance across the whole company can span several pages.
+async function fetchAllAttendance(dateFrom: string, dateTo: string): Promise<Attendance[]> {
+  const pageSize = 100;
+  const first = await api.get<ListResponse<Attendance>>("/attendance", {
+    date_from: dateFrom,
+    date_to: dateTo,
+    page: 1,
+    page_size: pageSize,
+  });
+  const items = [...first.items];
+  for (let page = 2; page <= first.meta.total_pages; page++) {
+    const next = await api.get<ListResponse<Attendance>>("/attendance", {
+      date_from: dateFrom,
+      date_to: dateTo,
+      page,
+      page_size: pageSize,
+    });
+    items.push(...next.items);
+  }
+  return items;
 }
 
 export default function DashboardHomePage() {
@@ -119,19 +107,22 @@ export default function DashboardHomePage() {
     async function load() {
       try {
         const today = todayIso();
-        const [employees, departments, devices, todayAttendance] = await Promise.all([
+        const weekStart = isoDaysAgo(6);
+        const [totalRes, activeRes, devicesRes, attendanceToday, weekAttendance] = await Promise.all([
+          api.get<ListResponse<Employee>>("/employees", { page: 1, page_size: 1 }),
           api.get<ListResponse<Employee>>("/employees", { status: "ACTIVE", page: 1, page_size: 1 }),
-          api.get<ListResponse<Department>>("/departments", { page: 1, page_size: 1 }),
           api.get<ListResponse<Device>>("/devices", { page: 1, page_size: 100 }),
-          api.get<ListResponse<Attendance>>("/attendance", { date_from: today, date_to: today, page: 1, page_size: 100 }),
+          fetchAllAttendance(today, today),
+          fetchAllAttendance(weekStart, today),
         ]);
 
         if (cancelled) return;
         setData({
-          activeEmployees: employees.meta.total_items,
-          departments: departments.meta.total_items,
-          devices: devices.items,
-          attendanceToday: todayAttendance.items,
+          totalEmployees: totalRes.meta.total_items,
+          activeEmployees: activeRes.meta.total_items,
+          devices: devicesRes.items,
+          attendanceToday,
+          weekAttendance,
         });
       } catch {
         // Dashboard degrades to empty widgets on failure; not worth a
@@ -147,248 +138,236 @@ export default function DashboardHomePage() {
     };
   }, []);
 
+  const activeEmployees = data?.activeEmployees ?? 0;
   const attendanceToday = data?.attendanceToday ?? [];
   const onTimeCount = attendanceToday.filter((a) => !isLate(a) && a.status !== "ABSENT").length;
   const lateCount = attendanceToday.filter(isLate).length;
   const checkedInCount = attendanceToday.length;
-  const notYetCount = Math.max((data?.activeEmployees ?? 0) - checkedInCount, 0);
-  const attendanceTotal = onTimeCount + lateCount + notYetCount || 1;
+  const notPresentCount = Math.max(activeEmployees - checkedInCount, 0);
+
+  const donutSegments: DonutSegment[] = [
+    { label: "Hadir", value: onTimeCount, colorClass: "text-emerald-500", dotClass: "bg-emerald-500" },
+    { label: "Terlambat", value: lateCount, colorClass: "text-amber-500", dotClass: "bg-amber-500" },
+    { label: "Tidak Hadir", value: notPresentCount, colorClass: "text-red-500", dotClass: "bg-red-500" },
+  ];
+
+  // 7-day trend, grouped from the same range query — each day's "tidak
+  // hadir" is approximated against today's active-employee count, since
+  // the backend doesn't track a historical headcount snapshot per day.
+  const trend: TrendPoint[] = Array.from({ length: 7 }).map((_, i) => {
+    const iso = isoDaysAgo(6 - i);
+    const dayRecords = (data?.weekAttendance ?? []).filter((a) => a.attendance_date === iso);
+    const late = dayRecords.filter(isLate).length;
+    const present = dayRecords.length;
+    return {
+      label: new Date(`${iso}T00:00:00`).toLocaleDateString("id-ID", { day: "numeric", month: "short" }),
+      hadir: present - late,
+      terlambat: late,
+      tidakHadir: Math.max(activeEmployees - present, 0),
+    };
+  });
 
   const recentActivity = [...attendanceToday]
     .filter((a) => a.check_in_at)
     .sort((a, b) => new Date(b.check_in_at ?? 0).getTime() - new Date(a.check_in_at ?? 0).getTime())
     .slice(0, 6);
 
-  const offlineDevices = (data?.devices ?? []).filter((d) => !d.is_online);
-  const onlineDeviceCount = (data?.devices ?? []).length - offlineDevices.length;
+  const devices = data?.devices ?? [];
+  const offlineDevices = devices.filter((d) => !d.is_online);
+  const onlineDeviceCount = devices.length - offlineDevices.length;
+
+  const pct = (n: number) => (activeEmployees > 0 ? `${((n / activeEmployees) * 100).toFixed(2)}% dari total karyawan` : undefined);
 
   return (
     <div className="space-y-4">
-      {/* Navy hero banner — echoes the login page's brand panel and the
-          Flutter kiosk's dark theme, so the landing page reads as this
-          product's own chrome instead of a generic light admin template. */}
-      <div className="relative overflow-hidden rounded-xl bg-sidebar px-6 py-7 text-white">
-        <div
-          className="pointer-events-none absolute inset-0 opacity-40"
-          style={{
-            backgroundImage:
-              "radial-gradient(circle at 12% 25%, rgba(56,189,248,0.25), transparent 45%), radial-gradient(circle at 88% 85%, rgba(56,189,248,0.15), transparent 40%)",
-          }}
-          aria-hidden
-        />
-        <div className="relative flex flex-wrap items-center justify-between gap-4">
-          <div>
-            {/* Full name, not a first-name split: dashboard accounts are
-                often role-style names ("Super Admin PT SIG"), not personal
-                "First Last" names, so splitting on the first space would
-                cut those off mid-title instead of shortening them
-                meaningfully. */}
-            <h1 className="text-2xl font-semibold tracking-tight text-balance">
-              Selamat datang, {user?.name ?? ""}
-            </h1>
-            <p className="mt-1 text-sm text-slate-300">
-              {new Date().toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
-            </p>
-          </div>
-          {user && (
-            <Badge className="border-sky-400/30 bg-sky-400/15 px-3 py-1.5 text-sky-300" variant="outline">
-              {ROLE_LABELS[user.role]}
-            </Badge>
-          )}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h1 className="text-lg font-semibold tracking-tight">Dashboard</h1>
+          <p className="text-sm text-muted-foreground">
+            Selamat datang kembali, {user?.name ?? ""} 👋
+          </p>
         </div>
+        <p className="text-sm text-muted-foreground">
+          {new Date().toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+        </p>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        {/* Kehadiran Hari Ini — the number that actually changes minute to
-            minute, so it gets the largest, most detailed treatment rather
-            than being one interchangeable box among four equal stat cards. */}
-        <Card className="gap-4 p-5 lg:col-span-2">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          label="Total Karyawan"
+          value={String(data?.totalEmployees ?? "-")}
+          icon={Users}
+          tone="blue"
+          hint={data ? `Aktif ${activeEmployees}` : undefined}
+          loading={loading}
+        />
+        <StatCard
+          label="Hadir Hari Ini"
+          value={String(onTimeCount)}
+          icon={CheckCircle2}
+          tone="emerald"
+          hint={pct(onTimeCount)}
+          loading={loading}
+        />
+        <StatCard
+          label="Terlambat"
+          value={String(lateCount)}
+          icon={Clock}
+          tone="amber"
+          hint={pct(lateCount)}
+          loading={loading}
+        />
+        <StatCard
+          label="Tidak Hadir"
+          value={String(notPresentCount)}
+          icon={XCircle}
+          tone="red"
+          hint={pct(notPresentCount)}
+          loading={loading}
+        />
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-3">
+        <Card className="gap-4 p-5 xl:col-span-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h2 className="text-sm font-semibold">Kehadiran Hari Ini</h2>
-              <p className="text-xs text-muted-foreground">Ringkasan absensi karyawan aktif</p>
+              <h2 className="text-sm font-semibold">Grafik Kehadiran</h2>
+              <p className="text-xs text-muted-foreground">7 hari terakhir</p>
             </div>
-            <Link
-              href="/attendance"
-              className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-            >
-              Lihat semua
+          </div>
+          <AttendanceTrendChart data={trend} loading={loading} />
+        </Card>
+
+        <Card className="gap-4 p-5">
+          <div>
+            <h2 className="text-sm font-semibold">Ringkasan Kehadiran Hari Ini</h2>
+            <p className="text-xs text-muted-foreground">Karyawan aktif</p>
+          </div>
+          <AttendanceDonut segments={donutSegments} total={activeEmployees} loading={loading} />
+          <LiveClock />
+        </Card>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-3">
+        <Card className="gap-3 p-5 xl:col-span-2">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold">Absensi Terbaru</h2>
+            <Link href="/attendance" className="flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+              Lihat Semua
               <ArrowRight className="size-3" />
             </Link>
           </div>
 
           {loading ? (
-            <Skeleton className="h-8 w-24" />
+            <div className="space-y-3">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <Skeleton className="size-8 rounded-full" />
+                  <Skeleton className="h-4 flex-1" />
+                  <Skeleton className="h-4 w-14" />
+                </div>
+              ))}
+            </div>
+          ) : recentActivity.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 py-8 text-center text-sm text-muted-foreground">
+              <Clock className="size-6 text-muted-foreground/50" />
+              Belum ada karyawan yang absen hari ini
+            </div>
           ) : (
-            <p className="text-3xl font-semibold tracking-tight">
-              {checkedInCount}
-              <span className="ml-1.5 text-base font-normal text-muted-foreground">
-                / {data?.activeEmployees ?? 0} sudah absen
-              </span>
-            </p>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Karyawan</TableHead>
+                  <TableHead>Waktu</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Perangkat</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {recentActivity.map((a) => (
+                  <TableRow key={a.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-2.5">
+                        <Avatar className="size-8 shrink-0">
+                          <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">
+                            {initials(a.employee_name)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">{a.employee_name}</p>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {a.employee_number}
+                            {a.shift_name ? ` · ${a.shift_name}` : ""}
+                          </p>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{formatTime(a.check_in_at)}</TableCell>
+                    <TableCell>
+                      <Badge variant={isLate(a) ? "destructive" : "secondary"} className="text-[11px]">
+                        {isLate(a) ? STATUS_LABELS.LATE : a.status === "CHECKED_OUT" ? STATUS_LABELS.CHECKED_OUT : STATUS_LABELS.ON_TIME}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{a.check_in_device_name ?? "-"}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           )}
-
-          {!loading && (
-            <div
-              className="flex h-2.5 w-full overflow-hidden rounded-full bg-muted"
-              role="img"
-              aria-label={`${onTimeCount} tepat waktu, ${lateCount} terlambat, ${notYetCount} belum absen`}
-            >
-              {onTimeCount > 0 && (
-                <div className="h-full bg-emerald-500" style={{ width: `${(onTimeCount / attendanceTotal) * 100}%` }} />
-              )}
-              {lateCount > 0 && (
-                <div className="h-full bg-amber-500" style={{ width: `${(lateCount / attendanceTotal) * 100}%` }} />
-              )}
-              {notYetCount > 0 && (
-                <div className="h-full bg-border" style={{ width: `${(notYetCount / attendanceTotal) * 100}%` }} />
-              )}
-            </div>
-          )}
-
-          <div className="grid grid-cols-3 gap-3 text-sm">
-            <div className="flex items-center gap-2">
-              <span className="size-2 shrink-0 rounded-full bg-emerald-500" aria-hidden />
-              <span className="text-muted-foreground">Tepat waktu</span>
-              <span className="ml-auto font-semibold">{loading ? "-" : onTimeCount}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="size-2 shrink-0 rounded-full bg-amber-500" aria-hidden />
-              <span className="text-muted-foreground">Terlambat</span>
-              <span className="ml-auto font-semibold">{loading ? "-" : lateCount}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="size-2 shrink-0 rounded-full bg-border" aria-hidden />
-              <span className="text-muted-foreground">Belum absen</span>
-              <span className="ml-auto font-semibold">{loading ? "-" : notYetCount}</span>
-            </div>
-          </div>
         </Card>
 
-        {/* Compact stat rows instead of three more equal-sized cards — these
-            numbers barely move day to day, so they don't need the same
-            visual weight as attendance. */}
-        <Card className="justify-center gap-0.5 p-2">
-          <MiniStat
-            label="Karyawan Aktif"
-            value={String(data?.activeEmployees ?? "-")}
-            icon={Users}
-            loading={loading}
-            href="/employees"
-            tone="blue"
-          />
-          <MiniStat
-            label="Divisi"
-            value={String(data?.departments ?? "-")}
-            icon={Building2}
-            loading={loading}
-            href="/departments"
-            tone="violet"
-          />
-          <MiniStat
-            label="Perangkat Online"
-            value={data ? `${onlineDeviceCount}/${data.devices.length}` : "-"}
-            icon={Tablet}
-            loading={loading}
-            href="/devices"
-            tone="amber"
-            hint={
-              offlineDevices.length > 0
-                ? `Offline: ${offlineDevices.map((d) => d.device_name).slice(0, 2).join(", ")}${offlineDevices.length > 2 ? ` +${offlineDevices.length - 2}` : ""}`
-                : undefined
-            }
-          />
-        </Card>
-      </div>
-
-      {/* Aktivitas Terbaru — real, changing data instead of a static
-          summary, so the dashboard reads as a live operations view rather
-          than a template landing page. */}
-      <Card className="gap-3 p-5">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold">Aktivitas Absen Terbaru</h2>
-          <Link
-            href="/attendance"
-            className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-          >
-            Lihat semua
-            <ArrowRight className="size-3" />
-          </Link>
-        </div>
-
-        {loading ? (
-          <div className="space-y-3">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-3">
-                <Skeleton className="size-8 rounded-full" />
-                <Skeleton className="h-4 flex-1" />
-                <Skeleton className="h-4 w-14" />
-              </div>
-            ))}
-          </div>
-        ) : recentActivity.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 py-8 text-center text-sm text-muted-foreground">
-            <Clock className="size-6 text-muted-foreground/50" />
-            Belum ada karyawan yang absen hari ini
-          </div>
-        ) : (
-          <div className="divide-y">
-            {recentActivity.map((a) => (
-              <div key={a.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
-                <Avatar className="size-8 shrink-0">
-                  <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">
-                    {initials(a.employee_name)}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{a.employee_name}</p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {a.employee_number}
-                    {a.shift_name ? ` · ${a.shift_name}` : ""}
-                  </p>
-                </div>
-                <div className="flex shrink-0 flex-col items-end gap-1">
-                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <Clock className="size-3" />
-                    {formatTime(a.check_in_at)}
-                  </span>
-                  <Badge variant={isLate(a) ? "destructive" : "secondary"} className="text-[11px]">
-                    {isLate(a) ? STATUS_LABELS.LATE : a.status === "CHECKED_OUT" ? STATUS_LABELS.CHECKED_OUT : STATUS_LABELS.ON_TIME}
-                  </Badge>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
-
-      {!loading && offlineDevices.length > 0 && (
-        <Card className="gap-3 border-amber-200 bg-amber-50/60 p-4 dark:border-amber-900/40 dark:bg-amber-500/5">
-          <div className="flex items-start gap-3">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400">
-              <WifiOff className="size-4" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium">
-                {offlineDevices.length} perangkat sedang offline
-              </p>
-              <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                {offlineDevices.map((d) => d.device_name).join(", ")}
-              </p>
-            </div>
-            <Link href="/devices" className="shrink-0 text-xs font-medium text-primary hover:underline">
-              Cek perangkat
+        <Card className="gap-3 p-5">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold">Status Perangkat</h2>
+            <Link href="/devices" className="flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+              Lihat Semua
+              <ArrowRight className="size-3" />
             </Link>
           </div>
-        </Card>
-      )}
 
-      {!loading && data && offlineDevices.length === 0 && data.devices.length > 0 && (
-        <p className="flex items-center gap-1.5 px-1 text-xs text-muted-foreground">
-          <CheckCircle2 className="size-3.5 text-emerald-500" />
-          Semua perangkat absensi online
-        </p>
-      )}
+          {loading ? (
+            <div className="space-y-3">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-10 w-full" />
+              ))}
+            </div>
+          ) : devices.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 py-8 text-center text-sm text-muted-foreground">
+              <Tablet className="size-6 text-muted-foreground/50" />
+              Belum ada perangkat terdaftar
+            </div>
+          ) : (
+            <>
+              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <CheckCircle2 className="size-3.5 text-emerald-500" />
+                {onlineDeviceCount} dari {devices.length} perangkat online
+              </p>
+              <div className="divide-y">
+                {devices.slice(0, 5).map((d) => (
+                  <div key={d.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
+                    <div
+                      className={`flex size-8 shrink-0 items-center justify-center rounded-lg ${
+                        d.is_online
+                          ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400"
+                          : "bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400"
+                      }`}
+                    >
+                      {d.is_online ? <Tablet className="size-4" /> : <WifiOff className="size-4" />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{d.device_name}</p>
+                      <p className="truncate text-xs text-muted-foreground">{d.location}</p>
+                    </div>
+                    <Badge variant={d.is_online ? "secondary" : "destructive"} className="text-[11px]">
+                      {d.is_online ? "Online" : "Offline"}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </Card>
+      </div>
     </div>
   );
 }

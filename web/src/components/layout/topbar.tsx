@@ -27,7 +27,13 @@ function initials(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-export function Topbar() {
+export function Topbar({
+  sidebarCollapsed,
+  onToggleSidebar,
+}: {
+  sidebarCollapsed: boolean;
+  onToggleSidebar: () => void;
+}) {
   const { user, logout } = useAuth();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const pathname = usePathname();
@@ -44,6 +50,7 @@ export function Topbar() {
           <SidebarNav onNavigate={() => setMobileNavOpen(false)} />
         </SheetContent>
       </Sheet>
+      {/* Mobile: opens the slide-over nav drawer. */}
       <Button
         variant="ghost"
         size="icon"
@@ -52,6 +59,17 @@ export function Topbar() {
       >
         <Menu className="size-5" />
         <span className="sr-only">Buka menu</span>
+      </Button>
+      {/* Desktop: collapses/expands the persistent sidebar in place. */}
+      <Button
+        variant="ghost"
+        size="icon"
+        className="hidden text-sidebar-foreground hover:bg-sidebar-accent hover:text-white md:inline-flex"
+        onClick={onToggleSidebar}
+        aria-pressed={sidebarCollapsed}
+      >
+        <Menu className="size-5" />
+        <span className="sr-only">{sidebarCollapsed ? "Buka sidebar" : "Tutup sidebar"}</span>
       </Button>
 
       {currentLabel && <h2 className="hidden text-sm font-semibold text-white md:block">{currentLabel}</h2>}
