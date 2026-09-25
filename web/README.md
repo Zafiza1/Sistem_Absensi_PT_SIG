@@ -22,16 +22,10 @@ section) must already be running and reachable at `NEXT_PUBLIC_API_URL`.
 
 ## Design system
 
-Light mode by default (unlike the tablet app's all-dark kiosk theme — this
-is read at a desk during work hours, not a camera-lit kiosk where dark
-reduces glare), with a dark navy sidebar against a light content area — the
-classic enterprise-dashboard split, and the one place this app visually
-echoes the tablet's kiosk theme. Colors (`src/app/globals.css`) deliberately
-reuse the same hues as the Flutter app's `AppColors`
-(`mobile/lib/core/app_theme.dart`) — navy `#0F172A`/`#0B1220` and sky-blue
-`#38BDF8`/`#0369A1` — so the two apps read as one product family. The `.dark`
-class's tokens are the *same* hex values as the tablet's dark theme, not
-just a similar palette.
+Light mode by default with a dark navy sidebar against a light content area — the
+classic enterprise-dashboard split. Colors (`src/app/globals.css`) use
+navy `#0F172A`/`#0B1220` and sky-blue `#38BDF8`/`#0369A1` for a professional
+corporate appearance. The `.dark` class's tokens provide dark mode support.
 
 Style is Minimalism/Swiss (borders over shadows, generous whitespace, a
 tight `0.55rem` radius) — chosen over shadcn's fancier default presets
@@ -117,8 +111,6 @@ client-side once `loading` resolves with no user.
 ## Branding
 
 `public/logo.png` / `src/app/login/page.tsx` / `components/layout/
-sidebar-nav.tsx` use the same company mark as the Flutter tablet app
-(`mobile/assets/images/logo.png` — copied from `assets/logo.png` at the
-repo root). That source file is only 62×40px; see `mobile/README.md`'s
-note on regenerating a sharper version if a higher-resolution logo ever
-becomes available.
+sidebar-nav.tsx` use the company logo from `assets/logo.png` at the
+repo root. The current logo is 62×40px; consider regenerating a higher-resolution
+version if needed for production use.
