@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { MoreHorizontal, Plus, Circle, Tablet } from "lucide-react";
+import { MoreHorizontal, Plus, Circle, Fingerprint, Wifi, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 import { api, ApiError } from "@/lib/api-client";
@@ -34,10 +34,23 @@ interface FormState {
   device_name: string;
   device_code: string;
   location: string;
+  device_type: "FINGERSPOT" | "TABLET" | "OTHER";
+  serial_number: string;
+  ip_address: string;
+  port: string;
   status: "ACTIVE" | "INACTIVE";
 }
 
-const EMPTY_FORM: FormState = { device_name: "", device_code: "", location: "", status: "ACTIVE" };
+const EMPTY_FORM: FormState = {
+  device_name: "",
+  device_code: "",
+  location: "",
+  device_type: "FINGERSPOT",
+  serial_number: "",
+  ip_address: "",
+  port: "",
+  status: "ACTIVE",
+};
 
 function formatDate(value: string | null): string {
   if (!value) return "-";
@@ -69,6 +82,10 @@ export default function DevicesPage() {
       device_name: device.device_name,
       device_code: device.device_code,
       location: device.location,
+      device_type: device.device_type || "FINGERSPOT",
+      serial_number: device.serial_number || "",
+      ip_address: device.ip_address || "",
+      port: device.port ? String(device.port) : "",
       status: device.status,
     });
     setFieldErrors({});
@@ -80,15 +97,24 @@ export default function DevicesPage() {
     setSaving(true);
     setFieldErrors({});
     try {
+      const payload = {
+        device_name: form.device_name,
+        device_code: form.device_code,
+        location: form.location,
+        device_type: form.device_type,
+        serial_number: form.serial_number || null,
+        ip_address: form.ip_address || null,
+        port: form.port ? parseInt(form.port, 10) : null,
+      };
+
       if (editing) {
-        await api.put(`/devices/${editing.id}`, form);
+        await api.put(`/devices/${editing.id}`, {
+          ...payload,
+          status: form.status,
+        });
         toast.success("Perangkat berhasil diperbarui");
       } else {
-        await api.post("/devices/register", {
-          device_name: form.device_name,
-          device_code: form.device_code,
-          location: form.location,
-        });
+        await api.post("/devices/register", payload);
         toast.success("Perangkat berhasil didaftarkan");
       }
       setDialogOpen(false);
@@ -117,7 +143,7 @@ export default function DevicesPage() {
     <div>
       <PageHeader
         title="Perangkat"
-        description="Kelola tablet absensi yang terdaftar"
+        description="Kelola perangkat Fingerspot yang terdaftar"
         action={
           writable && (
             <Button onClick={openCreate}>
@@ -133,9 +159,10 @@ export default function DevicesPage() {
           <TableHeader>
             <TableRow>
               <TableHead>Nama Perangkat</TableHead>
-              <TableHead>Kode</TableHead>
+              <TableHead>Tipe</TableHead>
               <TableHead>Lokasi</TableHead>
-              <TableHead>Online</TableHead>
+              <TableHead>Koneksi</TableHead>
+              <TableHead>Sync</TableHead>
               <TableHead>Terakhir Aktif</TableHead>
               <TableHead>Status</TableHead>
               {writable && <TableHead className="w-12" />}
@@ -145,25 +172,25 @@ export default function DevicesPage() {
             {loading &&
               Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={i}>
-                  <TableCell colSpan={7}>
+                  <TableCell colSpan={8}>
                     <Skeleton className="h-5 w-full" />
                   </TableCell>
                 </TableRow>
               ))}
             {!loading && error && (
               <TableRow>
-                <TableCell colSpan={7} className="py-8 text-center text-destructive">
+                <TableCell colSpan={8} className="py-8 text-center text-destructive">
                   {error}
                 </TableCell>
               </TableRow>
             )}
             {!loading && !error && items.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7}>
+                <TableCell colSpan={8}>
                   <EmptyState
-                    icon={Tablet}
+                    icon={Fingerprint}
                     title="Belum ada perangkat terdaftar"
-                    description={writable ? "Daftarkan tablet absensi pertama untuk mulai mencatat kehadiran." : undefined}
+                    description={writable ? "Daftarkan perangkat Fingerspot pertama untuk mulai mencatat kehadiran." : undefined}
                   />
                 </TableCell>
               </TableRow>
@@ -173,19 +200,40 @@ export default function DevicesPage() {
               items.map((device) => (
                 <TableRow key={device.id}>
                   <TableCell className="font-medium">{device.device_name}</TableCell>
-                  <TableCell className="font-mono text-sm">{device.device_code}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="text-xs">
+                      {device.device_type === "FINGERSPOT" ? "Fingerspot" : device.device_type}
+                    </Badge>
+                  </TableCell>
                   <TableCell className="text-muted-foreground">{device.location || "-"}</TableCell>
                   <TableCell>
                     <span
                       className={cn(
                         "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium",
-                        device.is_online
+                        device.is_connected
                           ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400"
-                          : "bg-muted text-muted-foreground",
+                          : "bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400",
                       )}
                     >
-                      <Circle className="size-1.5 fill-current" />
-                      {device.is_online ? "Online" : "Offline"}
+                      <Wifi className="size-3" />
+                      {device.connection_status === "CONNECTED" ? "Terhubung" : device.connection_status === "DISCONNECTED" ? "Terputus" : device.connection_status}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium",
+                        device.sync_status === "SUCCESS"
+                          ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400"
+                          : device.sync_status === "FAILED"
+                            ? "bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400"
+                            : device.sync_status === "SYNCING"
+                              ? "bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400"
+                              : "bg-muted text-muted-foreground",
+                      )}
+                    >
+                      {device.is_syncing ? <RefreshCw className="size-3 animate-spin" /> : <Circle className="size-1.5 fill-current" />}
+                      {device.sync_status === "SUCCESS" ? "Sukses" : device.sync_status === "FAILED" ? "Gagal" : device.sync_status === "SYNCING" ? "Sinkronisasi" : "Idle"}
                     </span>
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">{formatDate(device.last_seen_at)}</TableCell>
@@ -236,15 +284,32 @@ export default function DevicesPage() {
               <Label htmlFor="device_code">Kode Perangkat</Label>
               <Input
                 id="device_code"
-                placeholder="TAB-001"
+                placeholder="FS-001"
                 value={form.device_code}
                 onChange={(e) => setForm((f) => ({ ...f, device_code: e.target.value }))}
                 required
               />
               <p className="text-xs text-muted-foreground">
-                Kode ini yang dimasukkan di aplikasi tablet saat pendaftaran perangkat.
+                Kode unik untuk identifikasi perangkat.
               </p>
               {fieldErrors.device_code && <p className="text-sm text-destructive">{fieldErrors.device_code}</p>}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="device_type">Tipe Perangkat</Label>
+              <Select
+                items={{ FINGERSPOT: "Fingerspot", TABLET: "Tablet", OTHER: "Lainnya" }}
+                value={form.device_type}
+                onValueChange={(v) => setForm((f) => ({ ...f, device_type: v as FormState["device_type"] }))}
+              >
+                <SelectTrigger id="device_type" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="FINGERSPOT">Fingerspot</SelectItem>
+                  <SelectItem value="TABLET">Tablet</SelectItem>
+                  <SelectItem value="OTHER">Lainnya</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="location">Lokasi</Label>
@@ -252,6 +317,35 @@ export default function DevicesPage() {
                 id="location"
                 value={form.location}
                 onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="serial_number">Serial Number</Label>
+                <Input
+                  id="serial_number"
+                  value={form.serial_number}
+                  onChange={(e) => setForm((f) => ({ ...f, serial_number: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ip_address">IP Address</Label>
+                <Input
+                  id="ip_address"
+                  placeholder="192.168.1.100"
+                  value={form.ip_address}
+                  onChange={(e) => setForm((f) => ({ ...f, ip_address: e.target.value }))}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="port">Port</Label>
+              <Input
+                id="port"
+                type="number"
+                placeholder="5005"
+                value={form.port}
+                onChange={(e) => setForm((f) => ({ ...f, port: e.target.value }))}
               />
             </div>
             {editing && (
@@ -288,7 +382,7 @@ export default function DevicesPage() {
         open={!!deleteTarget}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
         title="Hapus perangkat?"
-        description={`"${deleteTarget?.device_name}" akan dihapus permanen. Tablet ini tidak akan bisa lagi mencatat absensi.`}
+        description={`"${deleteTarget?.device_name}" akan dihapus permanen. Perangkat ini tidak akan bisa lagi mencatat absensi.`}
         onConfirm={handleDelete}
       />
     </div>

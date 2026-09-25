@@ -6,7 +6,7 @@ import {
   CheckCircle2,
   Clock,
   XCircle,
-  Tablet,
+  Fingerprint,
   WifiOff,
   ArrowRight,
 } from "lucide-react";
@@ -173,8 +173,8 @@ export default function DashboardHomePage() {
     .slice(0, 6);
 
   const devices = data?.devices ?? [];
-  const offlineDevices = devices.filter((d) => !d.is_online);
-  const onlineDeviceCount = devices.length - offlineDevices.length;
+  const connectedDevices = devices.filter((d) => d.is_connected);
+  const connectedDeviceCount = connectedDevices.length;
 
   const pct = (n: number) => (activeEmployees > 0 ? `${((n / activeEmployees) * 100).toFixed(2)}% dari total karyawan` : undefined);
 
@@ -333,34 +333,39 @@ export default function DashboardHomePage() {
             </div>
           ) : devices.length === 0 ? (
             <div className="flex flex-col items-center gap-2 py-8 text-center text-sm text-muted-foreground">
-              <Tablet className="size-6 text-muted-foreground/50" />
+              <Fingerprint className="size-6 text-muted-foreground/50" />
               Belum ada perangkat terdaftar
             </div>
           ) : (
             <>
               <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <CheckCircle2 className="size-3.5 text-emerald-500" />
-                {onlineDeviceCount} dari {devices.length} perangkat online
+                {connectedDeviceCount} dari {devices.length} perangkat terhubung
               </p>
               <div className="divide-y">
                 {devices.slice(0, 5).map((d) => (
                   <div key={d.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
                     <div
                       className={`flex size-8 shrink-0 items-center justify-center rounded-lg ${
-                        d.is_online
+                        d.is_connected
                           ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400"
                           : "bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400"
                       }`}
                     >
-                      {d.is_online ? <Tablet className="size-4" /> : <WifiOff className="size-4" />}
+                      {d.is_connected ? <Fingerprint className="size-4" /> : <WifiOff className="size-4" />}
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">{d.device_name}</p>
                       <p className="truncate text-xs text-muted-foreground">{d.location}</p>
                     </div>
-                    <Badge variant={d.is_online ? "secondary" : "destructive"} className="text-[11px]">
-                      {d.is_online ? "Online" : "Offline"}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-[10px]">
+                        {d.device_type === "FINGERSPOT" ? "Fingerspot" : d.device_type}
+                      </Badge>
+                      <Badge variant={d.is_connected ? "secondary" : "destructive"} className="text-[11px]">
+                        {d.is_connected ? "Terhubung" : "Terputus"}
+                      </Badge>
+                    </div>
                   </div>
                 ))}
               </div>

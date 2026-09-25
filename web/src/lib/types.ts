@@ -77,6 +77,8 @@ export interface Employee {
   position_name: string | null;
   shift_id: string | null;
   shift_name: string | null;
+  device_user_id: string | null;
+  biometric_id: string | null;
   status: EmployeeStatus;
   created_at: string;
   updated_at: string;
@@ -137,6 +139,9 @@ export interface MonthlyReport {
 }
 
 export type DeviceStatus = "ACTIVE" | "INACTIVE";
+export type DeviceType = "FINGERSPOT" | "TABLET" | "OTHER";
+export type ConnectionStatus = "CONNECTED" | "DISCONNECTED" | "ERROR" | "SYNCING";
+export type SyncStatus = "IDLE" | "SYNCING" | "SUCCESS" | "FAILED";
 
 export interface Device {
   id: string;
@@ -144,8 +149,18 @@ export interface Device {
   device_code: string;
   location: string;
   status: DeviceStatus;
+  device_type: DeviceType;
+  serial_number: string | null;
+  ip_address: string | null;
+  port: number | null;
+  connection_status: ConnectionStatus;
+  sync_status: SyncStatus;
+  error_message: string | null;
   app_version: string | null;
+  device_config: Record<string, unknown> | null;
   is_online: boolean;
+  is_connected: boolean;
+  is_syncing: boolean;
   last_seen_at: string | null;
   last_sync_at: string | null;
   created_at: string;

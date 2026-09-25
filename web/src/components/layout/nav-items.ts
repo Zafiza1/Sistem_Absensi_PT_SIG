@@ -6,7 +6,7 @@ import {
   Clock,
   CalendarClock,
   CalendarDays,
-  Tablet,
+  Fingerprint,
   ClipboardList,
   BarChart3,
   UserCog,
@@ -46,7 +46,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/shifts", label: "Shift", icon: Clock, tone: "amber", section: "Data Master" },
   { href: "/company-schedule", label: "Jam Kerja", icon: CalendarClock, tone: "amber", section: "Operasional" },
   { href: "/schedules", label: "Jadwal Kerja", icon: CalendarDays, tone: "amber", section: "Operasional" },
-  { href: "/devices", label: "Perangkat", icon: Tablet, tone: "cyan", section: "Operasional" },
+  { href: "/devices", label: "Perangkat", icon: Fingerprint, tone: "cyan", section: "Operasional" },
   { href: "/attendance", label: "Riwayat Absensi", icon: ClipboardList, tone: "green", section: "Operasional" },
   { href: "/reports", label: "Laporan", icon: BarChart3, tone: "blue", section: "Laporan & Administrasi" },
   {

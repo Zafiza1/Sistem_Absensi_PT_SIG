@@ -40,6 +40,8 @@ interface FormState {
   department_id: string;
   position_id: string;
   shift_id: string;
+  device_user_id: string;
+  biometric_id: string;
   status: "ACTIVE" | "INACTIVE";
 }
 
@@ -51,6 +53,8 @@ const EMPTY_FORM: FormState = {
   department_id: UNASSIGNED,
   position_id: UNASSIGNED,
   shift_id: UNASSIGNED,
+  device_user_id: "",
+  biometric_id: "",
   status: "ACTIVE",
 };
 
@@ -91,6 +95,8 @@ export default function EmployeesPage() {
       department_id: employee.department_id ?? UNASSIGNED,
       position_id: employee.position_id ?? UNASSIGNED,
       shift_id: employee.shift_id ?? UNASSIGNED,
+      device_user_id: employee.device_user_id ?? "",
+      biometric_id: employee.biometric_id ?? "",
       status: employee.status,
     });
     setFieldErrors({});
@@ -109,6 +115,8 @@ export default function EmployeesPage() {
       department_id: form.department_id === UNASSIGNED ? null : form.department_id,
       position_id: form.position_id === UNASSIGNED ? null : form.position_id,
       shift_id: form.shift_id === UNASSIGNED ? null : form.shift_id,
+      device_user_id: form.device_user_id || null,
+      biometric_id: form.biometric_id || null,
       ...(editing ? { status: form.status } : {}),
     };
     try {
@@ -177,6 +185,7 @@ export default function EmployeesPage() {
               <TableHead>Divisi</TableHead>
               <TableHead>Jabatan</TableHead>
               <TableHead>Shift</TableHead>
+              <TableHead>Device ID</TableHead>
               <TableHead>Status</TableHead>
               {writable && <TableHead className="w-12" />}
             </TableRow>
@@ -185,21 +194,21 @@ export default function EmployeesPage() {
             {loading &&
               Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={i}>
-                  <TableCell colSpan={7}>
+                  <TableCell colSpan={8}>
                     <Skeleton className="h-5 w-full" />
                   </TableCell>
                 </TableRow>
               ))}
             {!loading && error && (
               <TableRow>
-                <TableCell colSpan={7} className="py-8 text-center text-destructive">
+                <TableCell colSpan={8} className="py-8 text-center text-destructive">
                   {error}
                 </TableCell>
               </TableRow>
             )}
             {!loading && !error && items.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7}>
+                <TableCell colSpan={8}>
                   <EmptyState
                     icon={Users}
                     title="Tidak ada karyawan ditemukan"
@@ -217,6 +226,7 @@ export default function EmployeesPage() {
                   <TableCell className="text-muted-foreground">{employee.department_name ?? "-"}</TableCell>
                   <TableCell className="text-muted-foreground">{employee.position_name ?? "-"}</TableCell>
                   <TableCell className="text-muted-foreground">{employee.shift_name ?? "-"}</TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground">{employee.device_user_id ?? "-"}</TableCell>
                   <TableCell>
                     <Badge variant={employee.status === "ACTIVE" ? "default" : "secondary"}>
                       {employee.status === "ACTIVE" ? "Aktif" : "Nonaktif"}
@@ -351,6 +361,32 @@ export default function EmployeesPage() {
                 Boleh dikosongkan. Cadangan bila Jam Kerja perusahaan belum diatur untuk suatu hari.
                 Untuk jam kerja yang berbeda dari perusahaan, gunakan menu Jadwal Kerja.
               </p>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="device_user_id">Device User ID (opsional)</Label>
+                <Input
+                  id="device_user_id"
+                  placeholder="USER001"
+                  value={form.device_user_id}
+                  onChange={(e) => setForm((f) => ({ ...f, device_user_id: e.target.value }))}
+                />
+                <p className="text-xs text-muted-foreground">
+                  ID user di perangkat Fingerspot
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="biometric_id">Biometric ID (opsional)</Label>
+                <Input
+                  id="biometric_id"
+                  placeholder="FP-001"
+                  value={form.biometric_id}
+                  onChange={(e) => setForm((f) => ({ ...f, biometric_id: e.target.value }))}
+                />
+                <p className="text-xs text-muted-foreground">
+                  ID biometrik di perangkat Fingerspot
+                </p>
+              </div>
             </div>
             {editing && (
               <div className="space-y-2">
