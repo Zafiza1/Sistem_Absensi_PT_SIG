@@ -1,21 +1,5 @@
-// Package payroll computes monthly salary deductions from attendance
-// lateness, per company policy:
-//
-//	late  1-10 minutes  -> flat Rp 20,000
-//	late 11-30 minutes  -> flat Rp 50,000
-//	late 31+ minutes    -> half a day's pay (base_salary / 26 working days / 2)
-//
-// It has no rule for a check-in after 12:00 noon distinct from the 31+
-// minutes tier — the source policy mentions noon only as the practical
-// upper bound of when a late arrival is still a "late check-in" rather
-// than a full-day absence, and internal/report already derives ABSENT for
-// days with no attendance at all. A separate "checked in after noon"
-// policy, if the company wants one, is not implemented here.
-//
-// It reads employees.base_salary ("Gaji Pokok", internal/employee) and
-// attendances.late_minutes (internal/attendance), and cross-references
-// internal/leave for how many of the employee's 12 annual leave days have
-// been used, so a payroll run can be reviewed alongside remaining leave.
+// Package payroll provides comprehensive payroll management including
+// attendance-based deductions, salary calculations, and payroll period management.
 package payroll
 
 import (
@@ -56,8 +40,97 @@ func ComputeLateDeduction(lateMinutes int, baseSalary int64) int64 {
 	}
 }
 
+// PayrollPeriod represents a payroll processing period (usually monthly)
+type PayrollPeriod struct {
+	ID              uuid.UUID
+	PeriodStart     time.Time
+	PeriodEnd       time.Time
+	Year            int
+	Month           int
+	Status          string // DRAFT, PROCESSING, COMPLETED, LOCKED
+	ProcessedAt     *time.Time
+	ProcessedBy     *uuid.UUID
+	TotalEmployees  int
+	TotalGrossPay   int64
+	TotalNetPay     int64
+	TotalDeductions int64
+	Notes           string
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+}
+
+// PayrollItem represents payroll data for a single employee in a period
+type PayrollItem struct {
+	ID              uuid.UUID
+	PayrollPeriodID uuid.UUID
+	EmployeeID      uuid.UUID
+	EmployeeNumber  string
+	EmployeeName    string
+	DepartmentID    *uuid.UUID
+	DepartmentName  string
+	PositionID      *uuid.UUID
+	PositionName    string
+
+	// Attendance summary
+	WorkingDays int
+	PresentDays int
+	AbsentDays  int
+	LateDays    int
+	LateMinutes int
+	LeaveDays   int
+
+	// Earnings
+	BaseSalary    int64
+	OvertimeHours float64
+	OvertimePay   int64
+	Allowance     int64
+	Bonus         int64
+	OtherEarnings int64
+	TotalEarnings int64
+
+	// Deductions
+	LateDeduction      int64
+	AbsentDeduction    int64
+	TaxDeduction       int64
+	InsuranceDeduction int64
+	OtherDeductions    int64
+	TotalDeductions    int64
+
+	// Final amounts
+	GrossPay int64
+	NetPay   int64
+
+	// Payment info
+	PaymentStatus    string // PENDING, PAID, FAILED
+	PaymentDate      *time.Time
+	PaymentMethod    string
+	PaymentReference string
+	Notes            string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
+// DeductionRule represents a payroll deduction rule
+type DeductionRule struct {
+	ID              uuid.UUID
+	RuleType        string // LATE, ABSENT, OTHER
+	RuleName        string
+	Description     string
+	LateMinMinutes  *int
+	LateMaxMinutes  *int
+	DeductionAmount int64
+	DeductionType   string // FIXED, PERCENTAGE, HALF_DAY_SALARY
+	PercentageValue *float64
+	IsActive        bool
+	EffectiveDate   time.Time
+	ExpiryDate      *time.Time
+	Priority        int
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+}
+
 // EmployeePayroll is one employee's deduction summary for the reported
-// month.
+// month (legacy compatibility)
 type EmployeePayroll struct {
 	EmployeeID     uuid.UUID
 	EmployeeNumber string
@@ -74,7 +147,7 @@ type EmployeePayroll struct {
 }
 
 // Monthly is the payroll report for one calendar month, optionally scoped
-// to one department.
+// to one department (legacy compatibility)
 type Monthly struct {
 	Year        int
 	Month       int

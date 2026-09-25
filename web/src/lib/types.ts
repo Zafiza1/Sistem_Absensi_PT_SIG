@@ -213,3 +213,85 @@ export interface AuditLogEntry {
   ip_address: string;
   created_at: string;
 }
+
+// Payroll Period Types
+export type PayrollPeriodStatus = "DRAFT" | "PROCESSING" | "COMPLETED" | "LOCKED";
+export type PaymentStatus = "PENDING" | "PAID" | "FAILED";
+export type DeductionType = "FIXED" | "PERCENTAGE" | "HALF_DAY_SALARY";
+export type DeductionRuleType = "LATE" | "ABSENT" | "OTHER";
+
+export interface PayrollPeriod {
+  id: string;
+  period_start: string;
+  period_end: string;
+  year: number;
+  month: number;
+  status: PayrollPeriodStatus;
+  processed_at: string | null;
+  processed_by: string | null;
+  total_employees: number;
+  total_gross_pay: number;
+  total_net_pay: number;
+  total_deductions: number;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PayrollItem {
+  id: string;
+  payroll_period_id: string;
+  employee_id: string;
+  employee_number: string;
+  employee_name: string;
+  department_id: string | null;
+  department_name: string;
+  position_id: string | null;
+  position_name: string;
+  working_days: number;
+  present_days: number;
+  absent_days: number;
+  late_days: number;
+  late_minutes: number;
+  leave_days: number;
+  base_salary: number;
+  overtime_hours: number;
+  overtime_pay: number;
+  allowance: number;
+  bonus: number;
+  other_earnings: number;
+  total_earnings: number;
+  late_deduction: number;
+  absent_deduction: number;
+  tax_deduction: number;
+  insurance_deduction: number;
+  other_deductions: number;
+  total_deductions: number;
+  gross_pay: number;
+  net_pay: number;
+  payment_status: PaymentStatus;
+  payment_date: string | null;
+  payment_method: string | null;
+  payment_reference: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DeductionRule {
+  id: string;
+  rule_type: DeductionRuleType;
+  rule_name: string;
+  description: string | null;
+  late_min_minutes: number | null;
+  late_max_minutes: number | null;
+  deduction_amount: number;
+  deduction_type: DeductionType;
+  percentage_value: number | null;
+  is_active: boolean;
+  effective_date: string;
+  expiry_date: string | null;
+  priority: number;
+  created_at: string;
+  updated_at: string;
+}

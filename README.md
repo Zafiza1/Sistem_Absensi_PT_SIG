@@ -1,6 +1,7 @@
-# Sistem Absensi Digital — PT Surya Inti Gas
+# HRMS PT Surya Inti Gas
+## Human Resource Management System dengan Integrasi Biometrik Fingerspot
 
-Sistem absensi internal PT Surya Inti Gas yang menggunakan perangkat biometrik Fingerspot sebagai hardware absensi dan terintegrasi dengan backend internal SIG. Karyawan melakukan absensi pada perangkat Fingerspot, data disinkronkan ke backend SIG, dan dikelola melalui dashboard web untuk Admin/HR/Management.
+Sistem HRMS internal PT Surya Inti Gas yang menyediakan manajemen SDM lengkap termasuk absensi, penggajian, dan manajemen karyawan. Sistem menggunakan perangkat biometrik Fingerspot sebagai hardware absensi dan terintegrasi dengan backend internal SIG. Karyawan melakukan absensi pada perangkat Fingerspot, data disinkronkan ke backend SIG, dan dikelola melalui dashboard web untuk Admin/HR/Management.
 
 > Proyek ini terpisah sepenuhnya dari repo company-profile PT Surya Inti Gas
 > (Laravel/React, live di suryaintigas.com) — tidak ada kode atau data yang
@@ -232,6 +233,8 @@ Every response uses the same envelope:
 { "success": false, "message": "...", "errors": { ... } }
 ```
 
+**Note:** For complete payroll API documentation including period management, payroll items, and deduction rules, see [Payroll API Documentation](docs/payroll-api.md).
+
 ## Fingerspot Integration
 
 ### Architecture
@@ -370,12 +373,14 @@ Attendance data from Fingerspot devices is processed through the sync service:
 
 - **Cuti tahunan (annual leave):** 12 paid days per employee per calendar year.
 - **Late-arrival deductions:** 1–10 minutes late → Rp 20,000; 11–30 minutes → Rp 50,000; 31+ minutes → half a day's pay.
+- **Payroll Module:** Complete payroll management system with period-based processing, deduction rules, and payment tracking. See [Payroll API Documentation](docs/payroll-api.md) for details.
 
 ## Documentation
 
 - [Architecture Documentation](docs/architecture.md) - System architecture and components
 - [Fingerspot Integration](docs/fingerspot-integration.md) - Fingerspot device integration details
 - [Database Schema](docs/database.md) - Database structure and relationships
+- [Payroll API Documentation](docs/payroll-api.md) - Complete payroll module API documentation
 
 ## Security Notes
 
@@ -423,4 +428,8 @@ LIMIT 10;
 - Mobile app for employee self-service
 - Advanced analytics and reporting
 - Multi-location support
-- Integration with payroll system
+- Payslip generation (PDF) for payroll module
+- Bulk payment processing
+- Tax calculation automation
+- Insurance integration
+- Advanced payroll reporting and analytics

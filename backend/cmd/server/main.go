@@ -263,7 +263,32 @@ func main() {
 	// (unlike the reports above) it's restricted to adminOrHR rather than
 	// open to every authenticated role.
 	payrollHandler := payroll.NewHandler(payroll.NewService(payroll.NewPostgresRepository(pool)))
-	authed.GET("/payroll/monthly", adminOrHR, payrollHandler.Monthly)
+
+	// Payroll routes - restricted to adminOrHR
+	payrollGroup := authed.Group("/payroll")
+	{
+		// Legacy monthly report
+		payrollGroup.GET("/monthly", adminOrHR, payrollHandler.Monthly)
+
+		// Payroll Period Management
+		payrollGroup.POST("/periods", adminOrHR, payrollHandler.CreatePayrollPeriod)
+		payrollGroup.GET("/periods", adminOrHR, payrollHandler.ListPayrollPeriods)
+		payrollGroup.GET("/periods/:id", adminOrHR, payrollHandler.GetPayrollPeriod)
+		payrollGroup.POST("/periods/:id/process", adminOrHR, payrollHandler.ProcessPayrollPeriod)
+		payrollGroup.POST("/periods/:id/lock", adminOrHR, payrollHandler.LockPayrollPeriod)
+		payrollGroup.DELETE("/periods/:id", adminOrHR, payrollHandler.DeletePayrollPeriod)
+
+		// Payroll Item Management
+		payrollGroup.GET("/periods/:id/items", adminOrHR, payrollHandler.GetPayrollItems)
+		payrollGroup.PUT("/items/:id", adminOrHR, payrollHandler.UpdatePayrollItem)
+		payrollGroup.POST("/periods/:id/mark-paid", adminOrHR, payrollHandler.MarkAsPaid)
+
+		// Deduction Rule Management
+		payrollGroup.POST("/deduction-rules", adminOrHR, payrollHandler.CreateDeductionRule)
+		payrollGroup.GET("/deduction-rules", adminOrHR, payrollHandler.ListDeductionRules)
+		payrollGroup.PUT("/deduction-rules/:id", adminOrHR, payrollHandler.UpdateDeductionRule)
+		payrollGroup.DELETE("/deduction-rules/:id", adminOrHR, payrollHandler.DeleteDeductionRule)
+	}
 
 	// --- Phase 6 support: dashboard account management + audit trail -------
 	// User management is deliberately SUPER_ADMIN-only (not adminOnly): an

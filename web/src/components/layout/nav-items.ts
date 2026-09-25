@@ -11,6 +11,7 @@ import {
   BarChart3,
   UserCog,
   ScrollText,
+  DollarSign,
   type LucideIcon,
 } from "lucide-react";
 
@@ -49,6 +50,14 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/devices", label: "Perangkat", icon: Fingerprint, tone: "cyan", section: "Operasional" },
   { href: "/attendance", label: "Riwayat Absensi", icon: ClipboardList, tone: "green", section: "Operasional" },
   { href: "/reports", label: "Laporan", icon: BarChart3, tone: "blue", section: "Laporan & Administrasi" },
+  {
+    href: "/payroll",
+    label: "Payroll",
+    icon: DollarSign,
+    tone: "green",
+    section: "Laporan & Administrasi",
+    roles: ["SUPER_ADMIN", "ADMIN", "HR"],
+  },
   {
     href: "/users",
     label: "Kelola Akun",
