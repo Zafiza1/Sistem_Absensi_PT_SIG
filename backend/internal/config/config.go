@@ -42,6 +42,16 @@ type Config struct {
 	// when true. Useful for local development and containerized deploys;
 	// disable in environments where migrations are applied out-of-band.
 	AutoMigrate bool
+
+	// Fingerspot configuration for biometric device integration
+	FingerspotEnabled      bool
+	FingerspotAPIURL       string
+	FingerspotAPIKey       string
+	FingerspotAPISecret    string
+	FingerspotDeviceID     string
+	FingerspotDeviceIP     string
+	FingerspotDevicePort   int
+	FingerspotSyncInterval time.Duration
 }
 
 // Load reads configuration from environment variables, applying sane
@@ -49,15 +59,23 @@ type Config struct {
 // production-critical value is missing.
 func Load() (*Config, error) {
 	cfg := &Config{
-		AppEnv:          getEnv("APP_ENV", "development"),
-		AppPort:         getEnv("APP_PORT", "8080"),
-		DatabaseURL:     getEnv("DATABASE_URL", ""),
-		JWTSecret:       getEnv("JWT_SECRET", ""),
-		AccessTokenTTL:  getEnvDuration("ACCESS_TOKEN_TTL", 15*time.Minute),
-		RefreshTokenTTL: getEnvDuration("REFRESH_TOKEN_TTL", 7*24*time.Hour),
-		LogLevel:        getEnv("LOG_LEVEL", "info"),
-		AllowedOrigins:  getEnvList("ALLOWED_ORIGINS", []string{"http://localhost:3000"}),
-		AutoMigrate:     getEnvBool("AUTO_MIGRATE", true),
+		AppEnv:                 getEnv("APP_ENV", "development"),
+		AppPort:                getEnv("APP_PORT", "8080"),
+		DatabaseURL:            getEnv("DATABASE_URL", ""),
+		JWTSecret:              getEnv("JWT_SECRET", ""),
+		AccessTokenTTL:         getEnvDuration("ACCESS_TOKEN_TTL", 15*time.Minute),
+		RefreshTokenTTL:        getEnvDuration("REFRESH_TOKEN_TTL", 7*24*time.Hour),
+		LogLevel:               getEnv("LOG_LEVEL", "info"),
+		AllowedOrigins:         getEnvList("ALLOWED_ORIGINS", []string{"http://localhost:3000"}),
+		AutoMigrate:            getEnvBool("AUTO_MIGRATE", true),
+		FingerspotEnabled:      getEnvBool("FINGERSPOT_ENABLED", false),
+		FingerspotAPIURL:       getEnv("FINGERSPOT_API_URL", ""),
+		FingerspotAPIKey:       getEnv("FINGERSPOT_API_KEY", ""),
+		FingerspotAPISecret:    getEnv("FINGERSPOT_API_SECRET", ""),
+		FingerspotDeviceID:     getEnv("FINGERSPOT_DEVICE_ID", ""),
+		FingerspotDeviceIP:     getEnv("FINGERSPOT_DEVICE_IP", ""),
+		FingerspotDevicePort:   getEnvInt("FINGERSPOT_DEVICE_PORT", 0),
+		FingerspotSyncInterval: getEnvDuration("FINGERSPOT_SYNC_INTERVAL", 5*time.Minute),
 	}
 
 	if cfg.DatabaseURL == "" {
@@ -109,6 +127,18 @@ func getEnvDuration(key string, fallback time.Duration) time.Duration {
 		return fallback
 	}
 	return d
+}
+
+func getEnvInt(key string, fallback int) int {
+	v, ok := os.LookupEnv(key)
+	if !ok || v == "" {
+		return fallback
+	}
+	i, err := strconv.Atoi(v)
+	if err != nil {
+		return fallback
+	}
+	return i
 }
 
 func getEnvList(key string, fallback []string) []string {

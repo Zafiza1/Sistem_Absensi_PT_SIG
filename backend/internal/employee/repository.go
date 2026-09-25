@@ -31,6 +31,7 @@ type Filter struct {
 type Repository interface {
 	Create(ctx context.Context, e *Employee) error
 	FindByID(ctx context.Context, id uuid.UUID) (*Employee, error)
+	FindByDeviceUserID(ctx context.Context, deviceUserID string) (*Employee, error)
 	List(ctx context.Context, f Filter, p pagination.Params) ([]Employee, int64, error)
 	Update(ctx context.Context, e *Employee) error
 	SoftDelete(ctx context.Context, id uuid.UUID) error
@@ -52,6 +53,7 @@ func NewPostgresRepository(db *pgxpool.Pool) *PostgresRepository {
 const employeeColumns = `
 	e.id, e.employee_number, e.name, e.email, e.phone,
 	e.department_id, e.position_id, e.shift_id, e.status, e.base_salary,
+	e.device_user_id, e.biometric_id, e.device_user_data,
 	e.created_at, e.updated_at, e.deleted_at,
 	COALESCE(d.name, ''), COALESCE(p.name, ''), COALESCE(s.name, '')`
 
@@ -67,6 +69,7 @@ func scanEmployee(row pgx.Row, e *Employee) error {
 	return row.Scan(
 		&e.ID, &e.EmployeeNumber, &e.Name, &e.Email, &e.Phone,
 		&e.DepartmentID, &e.PositionID, &e.ShiftID, &e.Status, &e.BaseSalary,
+		&e.DeviceUserID, &e.BiometricID, &e.DeviceUserData,
 		&e.CreatedAt, &e.UpdatedAt, &e.DeletedAt,
 		&e.DepartmentName, &e.PositionName, &e.ShiftName,
 	)
@@ -74,11 +77,11 @@ func scanEmployee(row pgx.Row, e *Employee) error {
 
 func (r *PostgresRepository) Create(ctx context.Context, e *Employee) error {
 	const q = `
-		INSERT INTO employees (employee_number, name, email, phone, department_id, position_id, shift_id, status, base_salary)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		INSERT INTO employees (employee_number, name, email, phone, department_id, position_id, shift_id, status, base_salary, device_user_id, biometric_id, device_user_data)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		RETURNING id, created_at, updated_at`
 
-	err := r.db.QueryRow(ctx, q, e.EmployeeNumber, e.Name, e.Email, e.Phone, e.DepartmentID, e.PositionID, e.ShiftID, e.Status, e.BaseSalary).
+	err := r.db.QueryRow(ctx, q, e.EmployeeNumber, e.Name, e.Email, e.Phone, e.DepartmentID, e.PositionID, e.ShiftID, e.Status, e.BaseSalary, e.DeviceUserID, e.BiometricID, e.DeviceUserData).
 		Scan(&e.ID, &e.CreatedAt, &e.UpdatedAt)
 	if dberr.IsUniqueViolation(err) {
 		return classifyUniqueViolation(err)
@@ -110,6 +113,20 @@ func (r *PostgresRepository) FindByID(ctx context.Context, id uuid.UUID) (*Emplo
 
 	var e Employee
 	err := scanEmployee(r.db.QueryRow(ctx, q, id), &e)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &e, nil
+}
+
+func (r *PostgresRepository) FindByDeviceUserID(ctx context.Context, deviceUserID string) (*Employee, error) {
+	q := baseSelect + ` WHERE e.device_user_id = $1 AND e.deleted_at IS NULL`
+
+	var e Employee
+	err := scanEmployee(r.db.QueryRow(ctx, q, deviceUserID), &e)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -159,6 +176,7 @@ func (r *PostgresRepository) List(ctx context.Context, f Filter, p pagination.Pa
 		if err := rows.Scan(
 			&e.ID, &e.EmployeeNumber, &e.Name, &e.Email, &e.Phone,
 			&e.DepartmentID, &e.PositionID, &e.ShiftID, &e.Status, &e.BaseSalary,
+			&e.DeviceUserID, &e.BiometricID, &e.DeviceUserData,
 			&e.CreatedAt, &e.UpdatedAt, &e.DeletedAt,
 			&e.DepartmentName, &e.PositionName, &e.ShiftName, &total,
 		); err != nil {
@@ -177,12 +195,12 @@ func (r *PostgresRepository) Update(ctx context.Context, e *Employee) error {
 		UPDATE employees
 		SET employee_number = $1, name = $2, email = $3, phone = $4,
 		    department_id = $5, position_id = $6, shift_id = $7, status = $8,
-		    base_salary = $9
-		WHERE id = $10 AND deleted_at IS NULL
+		    base_salary = $9, device_user_id = $10, biometric_id = $11, device_user_data = $12
+		WHERE id = $13 AND deleted_at IS NULL
 		RETURNING updated_at`
 
 	err := r.db.QueryRow(ctx, q, e.EmployeeNumber, e.Name, e.Email, e.Phone,
-		e.DepartmentID, e.PositionID, e.ShiftID, e.Status, e.BaseSalary, e.ID).
+		e.DepartmentID, e.PositionID, e.ShiftID, e.Status, e.BaseSalary, e.DeviceUserID, e.BiometricID, e.DeviceUserData, e.ID).
 		Scan(&e.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound

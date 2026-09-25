@@ -16,14 +16,17 @@ import (
 )
 
 type CreateRequest struct {
-	EmployeeNumber string     `json:"employee_number" validate:"required,min=1,max=50"`
-	Name           string     `json:"name" validate:"required,min=2,max=150"`
-	Email          *string    `json:"email" validate:"omitempty,email"`
-	Phone          *string    `json:"phone" validate:"omitempty,max=30"`
-	DepartmentID   *uuid.UUID `json:"department_id"`
-	PositionID     *uuid.UUID `json:"position_id"`
-	ShiftID        *uuid.UUID `json:"shift_id"`
-	BaseSalary     int64      `json:"base_salary" validate:"omitempty,min=0"`
+	EmployeeNumber string                 `json:"employee_number" validate:"required,min=1,max=50"`
+	Name           string                 `json:"name" validate:"required,min=2,max=150"`
+	Email          *string                `json:"email" validate:"omitempty,email"`
+	Phone          *string                `json:"phone" validate:"omitempty,max=30"`
+	DepartmentID   *uuid.UUID             `json:"department_id"`
+	PositionID     *uuid.UUID             `json:"position_id"`
+	ShiftID        *uuid.UUID             `json:"shift_id"`
+	BaseSalary     int64                  `json:"base_salary" validate:"omitempty,min=0"`
+	DeviceUserID   string                 `json:"device_user_id" validate:"omitempty,max=100"`
+	BiometricID    string                 `json:"biometric_id" validate:"omitempty,max=100"`
+	DeviceUserData map[string]interface{} `json:"device_user_data"`
 }
 
 type UpdateRequest struct {
@@ -70,6 +73,9 @@ func (h *Handler) Create(c *gin.Context) {
 		PositionID:     req.PositionID,
 		ShiftID:        req.ShiftID,
 		BaseSalary:     req.BaseSalary,
+		DeviceUserID:   req.DeviceUserID,
+		BiometricID:    req.BiometricID,
+		DeviceUserData: req.DeviceUserData,
 	})
 	if err != nil {
 		writeError(c, err)
@@ -151,6 +157,9 @@ func (h *Handler) Update(c *gin.Context) {
 		ShiftID:        req.ShiftID,
 		Status:         req.Status,
 		BaseSalary:     req.BaseSalary,
+		DeviceUserID:   req.DeviceUserID,
+		BiometricID:    req.BiometricID,
+		DeviceUserData: req.DeviceUserData,
 	})
 	if err != nil {
 		writeError(c, err)
@@ -192,20 +201,23 @@ func writeError(c *gin.Context, err error) {
 
 func toData(e *Employee) gin.H {
 	return gin.H{
-		"id":              e.ID,
-		"employee_number": e.EmployeeNumber,
-		"name":            e.Name,
-		"email":           e.Email,
-		"phone":           e.Phone,
-		"department_id":   e.DepartmentID,
-		"department_name": e.DepartmentName,
-		"position_id":     e.PositionID,
-		"position_name":   e.PositionName,
-		"shift_id":        e.ShiftID,
-		"shift_name":      e.ShiftName,
-		"status":          e.Status,
-		"base_salary":     e.BaseSalary,
-		"created_at":      e.CreatedAt,
-		"updated_at":      e.UpdatedAt,
+		"id":               e.ID,
+		"employee_number":  e.EmployeeNumber,
+		"name":             e.Name,
+		"email":            e.Email,
+		"phone":            e.Phone,
+		"department_id":    e.DepartmentID,
+		"department_name":  e.DepartmentName,
+		"position_id":      e.PositionID,
+		"position_name":    e.PositionName,
+		"shift_id":         e.ShiftID,
+		"shift_name":       e.ShiftName,
+		"status":           e.Status,
+		"base_salary":      e.BaseSalary,
+		"device_user_id":   e.DeviceUserID,
+		"biometric_id":     e.BiometricID,
+		"device_user_data": e.DeviceUserData,
+		"created_at":       e.CreatedAt,
+		"updated_at":       e.UpdatedAt,
 	}
 }

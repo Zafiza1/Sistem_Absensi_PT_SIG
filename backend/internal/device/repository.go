@@ -32,6 +32,8 @@ type Repository interface {
 	// attendance), used to derive Device.IsOnline. Best-effort: callers
 	// should not fail the request that triggered it if Touch fails.
 	Touch(ctx context.Context, id uuid.UUID, seenAt time.Time) error
+	// UpdateSyncStatus updates the sync status and related fields
+	UpdateSyncStatus(ctx context.Context, id uuid.UUID, syncStatus, connectionStatus, errorMessage string) error
 }
 
 type PostgresRepository struct {
@@ -42,20 +44,23 @@ func NewPostgresRepository(db *pgxpool.Pool) *PostgresRepository {
 	return &PostgresRepository{db: db}
 }
 
-const selectColumns = `id, device_name, device_code, location, status, app_version, last_seen_at, last_sync_at, created_at, updated_at`
+const selectColumns = `id, device_name, device_code, location, status, device_type, serial_number, ip_address, port, connection_status, app_version, last_seen_at, last_sync_at, sync_status, error_message, device_config, created_at, updated_at`
 
 func scanDevice(row pgx.Row, d *Device) error {
-	return row.Scan(&d.ID, &d.DeviceName, &d.DeviceCode, &d.Location, &d.Status, &d.AppVersion,
-		&d.LastSeenAt, &d.LastSyncAt, &d.CreatedAt, &d.UpdatedAt)
+	return row.Scan(&d.ID, &d.DeviceName, &d.DeviceCode, &d.Location, &d.Status, &d.DeviceType,
+		&d.SerialNumber, &d.IPAddress, &d.Port, &d.ConnectionStatus, &d.AppVersion,
+		&d.LastSeenAt, &d.LastSyncAt, &d.SyncStatus, &d.ErrorMessage, &d.DeviceConfig,
+		&d.CreatedAt, &d.UpdatedAt)
 }
 
 func (r *PostgresRepository) Create(ctx context.Context, d *Device) error {
 	const q = `
-		INSERT INTO devices (device_name, device_code, location, status, app_version)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO devices (device_name, device_code, location, status, device_type, serial_number, ip_address, port, connection_status, app_version, device_config)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		RETURNING id, created_at, updated_at`
 
-	err := r.db.QueryRow(ctx, q, d.DeviceName, d.DeviceCode, d.Location, d.Status, d.AppVersion).
+	err := r.db.QueryRow(ctx, q, d.DeviceName, d.DeviceCode, d.Location, d.Status, d.DeviceType,
+		d.SerialNumber, d.IPAddress, d.Port, d.ConnectionStatus, d.AppVersion, d.DeviceConfig).
 		Scan(&d.ID, &d.CreatedAt, &d.UpdatedAt)
 	if dberr.IsUniqueViolation(err) {
 		return ErrDeviceCodeUsed
@@ -126,11 +131,15 @@ func (r *PostgresRepository) List(ctx context.Context, p pagination.Params) ([]D
 func (r *PostgresRepository) Update(ctx context.Context, d *Device) error {
 	const q = `
 		UPDATE devices
-		SET device_name = $1, device_code = $2, location = $3, status = $4, app_version = $5
-		WHERE id = $6
+		SET device_name = $1, device_code = $2, location = $3, status = $4, device_type = $5,
+		    serial_number = $6, ip_address = $7, port = $8, connection_status = $9,
+		    app_version = $10, sync_status = $11, error_message = $12, device_config = $13
+		WHERE id = $14
 		RETURNING updated_at`
 
-	err := r.db.QueryRow(ctx, q, d.DeviceName, d.DeviceCode, d.Location, d.Status, d.AppVersion, d.ID).
+	err := r.db.QueryRow(ctx, q, d.DeviceName, d.DeviceCode, d.Location, d.Status, d.DeviceType,
+		d.SerialNumber, d.IPAddress, d.Port, d.ConnectionStatus, d.AppVersion, d.SyncStatus,
+		d.ErrorMessage, d.DeviceConfig, d.ID).
 		Scan(&d.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrNotFound
@@ -150,6 +159,24 @@ func (r *PostgresRepository) Delete(ctx context.Context, id uuid.UUID) error {
 		return ErrNotFound
 	}
 	return nil
+}
+
+func (r *PostgresRepository) UpdateSyncStatus(ctx context.Context, id uuid.UUID, syncStatus, connectionStatus, errorMessage string) error {
+	const q = `
+		UPDATE devices
+		SET sync_status = COALESCE($1, sync_status),
+		    connection_status = COALESCE($2, connection_status),
+		    error_message = COALESCE($3, error_message),
+		    last_sync_at = CASE WHEN $1 IS NOT NULL THEN now() ELSE last_sync_at END
+		WHERE id = $4
+		RETURNING updated_at`
+
+	var updatedAt time.Time
+	err := r.db.QueryRow(ctx, q, &syncStatus, &connectionStatus, &errorMessage, id).Scan(&updatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotFound
+	}
+	return err
 }
 
 var _ Repository = (*PostgresRepository)(nil)

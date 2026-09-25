@@ -17,15 +17,23 @@ import (
 )
 
 type RegisterRequest struct {
-	DeviceName string `json:"device_name" validate:"required,min=2,max=150"`
-	DeviceCode string `json:"device_code" validate:"required,min=2,max=100"`
-	Location   string `json:"location" validate:"max=255"`
-	AppVersion string `json:"app_version" validate:"max=50"`
+	DeviceName   string                 `json:"device_name" validate:"required,min=2,max=150"`
+	DeviceCode   string                 `json:"device_code" validate:"required,min=2,max=100"`
+	Location     string                 `json:"location" validate:"max=255"`
+	AppVersion   string                 `json:"app_version" validate:"max=50"`
+	DeviceType   string                 `json:"device_type" validate:"omitempty,oneof=FINGERSPOT TABLET OTHER"`
+	SerialNumber string                 `json:"serial_number" validate:"max=100"`
+	IPAddress    string                 `json:"ip_address" validate:"omitempty,ip"`
+	Port         int                    `json:"port" validate:"omitempty,min=0,max=65535"`
+	DeviceConfig map[string]interface{} `json:"device_config"`
 }
 
 type UpdateRequest struct {
 	RegisterRequest
-	Status string `json:"status" validate:"omitempty,oneof=ACTIVE INACTIVE"`
+	Status           string `json:"status" validate:"omitempty,oneof=ACTIVE INACTIVE"`
+	ConnectionStatus string `json:"connection_status" validate:"omitempty,oneof=CONNECTED DISCONNECTED ERROR SYNCING"`
+	SyncStatus       string `json:"sync_status" validate:"omitempty,oneof=IDLE SYNCING SUCCESS FAILED"`
+	ErrorMessage     string `json:"error_message" validate:"max=500"`
 }
 
 type Handler struct {
@@ -59,10 +67,15 @@ func (h *Handler) Register(c *gin.Context) {
 	}
 
 	d, err := h.service.Register(c.Request.Context(), h.actor(c), Input{
-		DeviceName: req.DeviceName,
-		DeviceCode: req.DeviceCode,
-		Location:   req.Location,
-		AppVersion: req.AppVersion,
+		DeviceName:   req.DeviceName,
+		DeviceCode:   req.DeviceCode,
+		Location:     req.Location,
+		AppVersion:   req.AppVersion,
+		DeviceType:   req.DeviceType,
+		SerialNumber: req.SerialNumber,
+		IPAddress:    req.IPAddress,
+		Port:         req.Port,
+		DeviceConfig: req.DeviceConfig,
 	})
 	if err != nil {
 		writeError(c, err)
@@ -148,15 +161,35 @@ func (h *Handler) Update(c *gin.Context) {
 	}
 
 	d, err := h.service.Update(c.Request.Context(), h.actor(c), id, Input{
-		DeviceName: req.DeviceName,
-		DeviceCode: req.DeviceCode,
-		Location:   req.Location,
-		AppVersion: req.AppVersion,
+		DeviceName:   req.DeviceName,
+		DeviceCode:   req.DeviceCode,
+		Location:     req.Location,
+		AppVersion:   req.AppVersion,
+		DeviceType:   req.DeviceType,
+		SerialNumber: req.SerialNumber,
+		IPAddress:    req.IPAddress,
+		Port:         req.Port,
+		DeviceConfig: req.DeviceConfig,
 	}, req.Status)
 	if err != nil {
 		writeError(c, err)
 		return
 	}
+
+	// Update connection and sync status if provided
+	if req.ConnectionStatus != "" || req.SyncStatus != "" || req.ErrorMessage != "" {
+		if err := h.service.UpdateStatus(c.Request.Context(), h.actor(c), id, req.ConnectionStatus, req.SyncStatus, req.ErrorMessage); err != nil {
+			writeError(c, err)
+			return
+		}
+		// Refresh the device data to return updated status
+		d, err = h.service.Get(c.Request.Context(), id)
+		if err != nil {
+			writeError(c, err)
+			return
+		}
+	}
+
 	response.OK(c, http.StatusOK, "Perangkat berhasil diperbarui", toData(d))
 }
 
@@ -188,16 +221,26 @@ func writeError(c *gin.Context, err error) {
 
 func toData(d *Device) gin.H {
 	return gin.H{
-		"id":           d.ID,
-		"device_name":  d.DeviceName,
-		"device_code":  d.DeviceCode,
-		"location":     d.Location,
-		"status":       d.Status,
-		"app_version":  d.AppVersion,
-		"last_seen_at": d.LastSeenAt,
-		"last_sync_at": d.LastSyncAt,
-		"is_online":    d.IsOnline(time.Now()),
-		"created_at":   d.CreatedAt,
-		"updated_at":   d.UpdatedAt,
+		"id":                d.ID,
+		"device_name":       d.DeviceName,
+		"device_code":       d.DeviceCode,
+		"location":          d.Location,
+		"status":            d.Status,
+		"device_type":       d.DeviceType,
+		"serial_number":     d.SerialNumber,
+		"ip_address":        d.IPAddress,
+		"port":              d.Port,
+		"connection_status": d.ConnectionStatus,
+		"app_version":       d.AppVersion,
+		"last_seen_at":      d.LastSeenAt,
+		"last_sync_at":      d.LastSyncAt,
+		"sync_status":       d.SyncStatus,
+		"error_message":     d.ErrorMessage,
+		"device_config":     d.DeviceConfig,
+		"is_online":         d.IsOnline(time.Now()),
+		"is_connected":      d.IsConnected(),
+		"is_syncing":        d.IsSyncing(),
+		"created_at":        d.CreatedAt,
+		"updated_at":        d.UpdatedAt,
 	}
 }

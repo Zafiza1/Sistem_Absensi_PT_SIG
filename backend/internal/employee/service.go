@@ -20,6 +20,9 @@ type Input struct {
 	ShiftID        *uuid.UUID
 	Status         string
 	BaseSalary     int64
+	DeviceUserID   string
+	BiometricID    string
+	DeviceUserData map[string]interface{}
 }
 
 // Actor identifies who is performing a mutation, for the audit trail. It
@@ -51,6 +54,9 @@ func (s *Service) Create(ctx context.Context, actor Actor, in Input) (*Employee,
 		ShiftID:        in.ShiftID,
 		Status:         status,
 		BaseSalary:     in.BaseSalary,
+		DeviceUserID:   in.DeviceUserID,
+		BiometricID:    in.BiometricID,
+		DeviceUserData: in.DeviceUserData,
 	}
 	if err := s.repo.Create(ctx, e); err != nil {
 		return nil, err
@@ -63,6 +69,11 @@ func (s *Service) Create(ctx context.Context, actor Actor, in Input) (*Employee,
 
 func (s *Service) Get(ctx context.Context, id uuid.UUID) (*Employee, error) {
 	return s.repo.FindByID(ctx, id)
+}
+
+// GetByDeviceUserID finds an employee by their device user ID (e.g., Fingerspot user ID)
+func (s *Service) GetByDeviceUserID(ctx context.Context, deviceUserID string) (*Employee, error) {
+	return s.repo.FindByDeviceUserID(ctx, deviceUserID)
 }
 
 func (s *Service) List(ctx context.Context, f Filter, p pagination.Params) ([]Employee, int64, error) {
@@ -85,6 +96,9 @@ func (s *Service) Update(ctx context.Context, actor Actor, id uuid.UUID, in Inpu
 		ShiftID:        in.ShiftID,
 		Status:         status,
 		BaseSalary:     in.BaseSalary,
+		DeviceUserID:   in.DeviceUserID,
+		BiometricID:    in.BiometricID,
+		DeviceUserData: in.DeviceUserData,
 	}
 	if err := s.repo.Update(ctx, e); err != nil {
 		return nil, err

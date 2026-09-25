@@ -116,6 +116,14 @@ func (f *fakeEmployeeRepo) FindByID(_ context.Context, id uuid.UUID) (*employee.
 	}
 	return nil, employee.ErrNotFound
 }
+func (f *fakeEmployeeRepo) FindByDeviceUserID(_ context.Context, deviceUserID string) (*employee.Employee, error) {
+	for _, e := range f.byID {
+		if e.DeviceUserID == deviceUserID {
+			return e, nil
+		}
+	}
+	return nil, employee.ErrNotFound
+}
 func (f *fakeEmployeeRepo) List(context.Context, employee.Filter, pagination.Params) ([]employee.Employee, int64, error) {
 	return nil, 0, nil
 }
@@ -154,6 +162,9 @@ func (f *fakeDeviceRepo) Touch(_ context.Context, id uuid.UUID, seenAt time.Time
 		f.seen = map[uuid.UUID]time.Time{}
 	}
 	f.seen[id] = seenAt
+	return nil
+}
+func (f *fakeDeviceRepo) UpdateSyncStatus(_ context.Context, id uuid.UUID, syncStatus, connectionStatus, errorMessage string) error {
 	return nil
 }
 

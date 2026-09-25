@@ -1,9 +1,6 @@
 # Sistem Absensi Digital — PT Surya Inti Gas
 
-Sistem absensi karyawan berbasis pengenalan wajah untuk PT Surya Inti Gas:
-tablet kantor (Flutter) untuk check-in/check-out dengan face recognition +
-liveness detection, backend REST API (Go/Gin) sebagai satu-satunya sumber
-kebenaran, dan dashboard web (Next.js) untuk Admin/HR/Management.
+Sistem absensi internal PT Surya Inti Gas yang menggunakan perangkat biometrik Fingerspot sebagai hardware absensi dan terintegrasi dengan backend internal SIG. Karyawan melakukan absensi pada perangkat Fingerspot, data disinkronkan ke backend SIG, dan dikelola melalui dashboard web untuk Admin/HR/Management.
 
 > Proyek ini terpisah sepenuhnya dari repo company-profile PT Surya Inti Gas
 > (Laravel/React, live di suryaintigas.com) — tidak ada kode atau data yang
@@ -12,60 +9,69 @@ kebenaran, dan dashboard web (Next.js) untuk Admin/HR/Management.
 ## Architecture
 
 ```
-                         KARYAWAN
-                            │
-                            ▼
-                ┌──────────────────────┐
-                │     TABLET KANTOR    │
-                │       FLUTTER        │
-                │ • Camera             │
-                │ • Face Detection     │
-                │ • Face Recognition   │
-                │ • Liveness Detection │
-                │ • SQLite / Offline   │
-                └──────────┬───────────┘
-                           │ HTTPS / REST API
-                           ▼
-                ┌──────────────────────┐
-                │     GO / GIN API     │
-                │ • Auth  • Employee   │
-                │ • Attendance • Shift │
-                │ • Device • Report    │
-                └──────────┬───────────┘
-                           ▼
-                ┌──────────────────────┐
-                │      POSTGRESQL      │
-                └──────────┬───────────┘
-                           ▼
-                ┌──────────────────────┐
-                │  NEXT.JS DASHBOARD   │
-                │ Admin / HR / Mgmt    │
-                └──────────────────────┘
+                 KARYAWAN
+                    │
+                    ▼
+        ┌──────────────────────┐
+        │   FINGERSPOT DEVICE  │
+        │                      │
+        │ Fingerprint / Face   │
+        │ Attendance Log       │
+        └──────────┬───────────┘
+                   │
+                   ▼
+        ┌──────────────────────┐
+        │ DEVICE INTEGRATION   │
+        │                      │
+        │ Fingerspot SDK/API   │
+        │ Sync Service         │
+        │ Device Adapter       │
+        └──────────┬───────────┘
+                   │
+                   ▼
+        ┌──────────────────────┐
+        │     GO / GIN API     │
+        │                      │
+        │ Auth  • Employee     │
+        │ Attendance • Shift   │
+        │ Device • Report      │
+        │ Fingerspot Integ.    │
+        └──────────┬───────────┘
+                   │
+                   ▼
+        ┌──────────────────────┐
+        │      POSTGRESQL      │
+        └──────────┬───────────┘
+                   │
+                   ▼
+        ┌──────────────────────┐
+        │  NEXT.JS DASHBOARD   │
+        │ Admin / HR / Mgmt    │
+        └──────────────────────┘
 ```
 
 Single modular monolith for v1 — no microservices, no message broker. The Go
 backend is internally layered `Handler → Service → Repository → PostgreSQL`
 and organized by domain module (`internal/employee`, `internal/attendance`,
-...) so it can be split apart later if the company's scale ever demands it.
+`internal/fingerspot`, ...) so it can be split apart later if the company's scale ever demands it.
 
 ## Tech Stack
 
-| Layer | Technology |
-|---|---|
-| Backend API | Go + Gin, REST, JWT auth |
-| Database | PostgreSQL |
-| Tablet App | Flutter (Dart), SQLite offline store, on-device face recognition |
-| Web Dashboard | Next.js + TypeScript + React + Tailwind CSS |
-| Infra | Docker / Docker Compose, Nginx reverse proxy, HTTPS |
+|| Layer | Technology |
+||---|---|
+|| Backend API | Go + Gin, REST, JWT auth |
+|| Database | PostgreSQL |
+|| Biometric Device | Fingerspot (SDK/API integration) |
+|| Web Dashboard | Next.js + TypeScript + React + Tailwind CSS |
+|| Infra | Docker / Docker Compose, Nginx reverse proxy, HTTPS |
 
 ## Repository Layout
 
 ```
 /
-├── backend/     Go REST API (Gin, PostgreSQL, JWT)
-├── mobile/      Flutter tablet app — Phase 5
-├── web/         Next.js admin dashboard — Phase 6
-├── nginx/       Reverse proxy config — Phase 8
+├── backend/     Go REST API (Gin, PostgreSQL, JWT, Fingerspot integration)
+├── web/         Next.js admin dashboard
+├── docs/        Architecture and integration documentation
 ├── docker-compose.yml
 ├── .env.example
 └── README.md
@@ -74,32 +80,32 @@ and organized by domain module (`internal/employee`, `internal/attendance`,
 ## Development Phases
 
 Built incrementally; each phase must pass its own tests and leave prior
-phases working before the next one starts (see the full spec for detail).
+phases working before the next one starts.
 
-| Phase | Scope | Status |
-|---|---|---|
-| 1 | Foundation — repo structure, Gin, PostgreSQL, Docker, migrations, config, logging, health check | ✅ Done |
-| 2 | Authentication — users, login, JWT + refresh token, RBAC middleware | ✅ Done |
-| 3 | Master data — employees, departments, positions, shifts, schedules, devices | ✅ Done |
-| 4 | Attendance — check-in/out, late calculation, working duration, history | ✅ Done |
-| 5 | Flutter tablet app — camera, face recognition, liveness, offline + sync | ✅ Done (kiosk lock-down mode deferred) |
-| 6 | Next.js dashboard — all admin pages | ✅ Done |
-| 7 | Integration — end-to-end testing across all three apps | 🟡 Core + shift/schedule edge cases verified; see Phase 7 notes |
-| 8 | Deployment — VPS, Nginx, HTTPS, backups, monitoring | ⏳ Planned |
+|| Phase | Scope | Status |
+||---|---|---|
+|| 1 | Foundation — repo structure, Gin, PostgreSQL, Docker, migrations, config, logging, health check | ✅ Done |
+|| 2 | Authentication — users, login, JWT + refresh token, RBAC middleware | ✅ Done |
+|| 3 | Master data — employees, departments, positions, shifts, schedules, devices | ✅ Done |
+|| 4 | Attendance — check-in/out, late calculation, working duration, history | ✅ Done |
+|| 5 | Next.js dashboard — all admin pages | ✅ Done |
+|| 6 | Fingerspot Integration — device integration layer, sync service, adapter | ✅ Done (Mock adapter, awaiting SDK/API) |
+|| 7 | Migration — transition from tablet to Fingerspot architecture | ✅ Done |
+|| 8 | Integration — end-to-end testing with Fingerspot devices | 🟡 In Progress |
+|| 9 | Deployment — VPS, Nginx, HTTPS, backups, monitoring | ⏳ Planned |
 
 Roles: `SUPER_ADMIN`, `ADMIN`, `HR`, `MANAGEMENT` (enforced from Phase 2 onward).
 
 ## Requirements
 
-| Tool | Version | Notes |
-|---|---|---|
-| Go | 1.26+ | matches `backend/go.mod`; `winget install GoLang.Go` on Windows |
-| Docker + Docker Compose | recent | for `postgres` + `backend` locally, matching production |
-| PostgreSQL | 16 | only needed natively if you're not using Docker for it |
-| Node.js | 20+ | for `web/` (Phase 6) — see [web/README.md](web/README.md) |
-| Flutter SDK | stable channel | for `mobile/` (Phase 5) — see [mobile/README.md](mobile/README.md) |
+|| Tool | Version | Notes |
+||---|---|---|
+|| Go | 1.26+ | matches `backend/go.mod`; `winget install GoLang.Go` on Windows |
+|| Docker + Docker Compose | recent | for `postgres` + `backend` locally, matching production |
+|| PostgreSQL | 16 | only needed natively if you're not using Docker for it |
+|| Node.js | 20+ | for `web/` — see [web/README.md](web/README.md) |
 
-## Getting Started (Phase 1: backend + database only)
+## Getting Started (Backend + Database + Web)
 
 ### Option A — Docker (recommended)
 
@@ -108,10 +114,10 @@ copy .env.example .env      # Windows; `cp` on macOS/Linux — then edit secrets
 docker compose up --build
 ```
 
-This starts `postgres` (port 5432) and `backend` (port 8080). Migrations run
+This starts `postgres` (port 5432), `backend` (port 8080), and `web` (port 3000). Migrations run
 automatically on backend startup (`AUTO_MIGRATE=true`).
 
-Verify it's up:
+Verify backend is up:
 
 ```bash
 curl http://localhost:8080/health
@@ -125,6 +131,8 @@ curl http://localhost:8080/health
 }
 ```
 
+Access the web dashboard at: http://localhost:3000
+
 ### Option B — Native Go, Dockerized Postgres only
 
 ```bash
@@ -135,18 +143,33 @@ copy .env.example .env      # Windows; `cp` on macOS/Linux
 go run ./cmd/server
 ```
 
+Then start the web dashboard separately:
+
+```bash
+cd web
+npm install
+cp .env.example .env.local
+npm run dev
+```
+
 ## Environment Variables
 
 See [`.env.example`](.env.example) (Docker Compose) and
 [`backend/.env.example`](backend/.env.example) (native backend dev) for the
 full, commented list. Key ones:
 
-| Variable | Purpose |
-|---|---|
-| `DATABASE_URL` | PostgreSQL connection string |
-| `JWT_SECRET` | Signs access/refresh tokens — **required, non-default, in production** |
-| `ALLOWED_ORIGINS` | CORS allowlist for the Next.js dashboard |
-| `AUTO_MIGRATE` | Run pending DB migrations on backend startup |
+|| Variable | Purpose |
+||---|---|
+|| `DATABASE_URL` | PostgreSQL connection string |
+|| `JWT_SECRET` | Signs access/refresh tokens — **required, non-default, in production** |
+|| `ALLOWED_ORIGINS` | CORS allowlist for the Next.js dashboard |
+|| `AUTO_MIGRATE` | Run pending DB migrations on backend startup |
+|| `FINGERSPOT_ENABLED` | Enable Fingerspot device integration |
+|| `FINGERSPOT_API_URL` | Fingerspot API endpoint (when using real SDK/API) |
+|| `FINGERSPOT_API_KEY` | Fingerspot API key (when using real SDK/API) |
+|| `FINGERSPOT_DEVICE_IP` | Fingerspot device IP address |
+|| `FINGERSPOT_DEVICE_PORT` | Fingerspot device port |
+|| `FINGERSPOT_SYNC_INTERVAL` | Sync interval for attendance data |
 
 Never commit a real `.env` — only `.env.example` files are tracked (see
 [`.gitignore`](.gitignore)).
@@ -163,6 +186,13 @@ go run ./cmd/migrate -direction up
 go run ./cmd/migrate -direction down   # rolls back one step
 ```
 
+### Recent Migrations for Fingerspot Integration
+
+- `000016_update_devices_for_fingerspot.up.sql` - Added Fingerspot-specific fields to devices table
+- `000017_add_device_user_id_to_employees.up.sql` - Added device user ID mapping to employees
+- `000018_create_attendance_logs_table.up.sql` - Created attendance_logs table for raw device data
+- `000019_create_sync_status_table.up.sql` - Created sync_status table for tracking sync operations
+
 ## Running the Backend
 
 ```bash
@@ -174,28 +204,26 @@ go run ./cmd/server
 
 Base path: `/api/v1` (versioned from the start). Currently implemented:
 
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| GET | `/health` | — | Liveness + database connectivity check |
-| POST | `/api/v1/auth/login` | — | Email + password → access + refresh token |
-| POST | `/api/v1/auth/refresh` | — | Rotates a valid refresh token for a new pair |
-| POST | `/api/v1/auth/logout` | — | Revokes a refresh token |
-| GET | `/api/v1/auth/me` | Bearer | Current authenticated user's profile |
-| GET/POST | `/api/v1/departments`, `/positions`, `/shifts`, `/employees`, `/schedules`, `/devices` | Bearer (+ role for writes) | Master data CRUD — see table below |
-| GET/PUT/DELETE | `.../{id}` | Bearer (+ role for writes) | Detail / update / delete per resource above |
-| GET/PUT | `/api/v1/company-schedule` | Bearer (+ Admin/HR for write) | Company-wide default weekly schedule — see Attendance below |
-| POST | `/api/v1/devices/register` | Bearer, Admin+ | Register a tablet (create, spec-named endpoint) |
-| POST | `/api/v1/attendance/check-in` | **Device code**, no JWT | Tablet check-in — see Attendance below |
-| POST | `/api/v1/attendance/check-out` | **Device code**, no JWT | Tablet check-out |
-| GET | `/api/v1/attendance`, `/attendance/{id}` | Bearer | Attendance history (dashboard) |
-| GET | `/api/v1/reports/monthly` | Bearer | Monthly attendance report (JSON, or `.xlsx` with `?format=xlsx`) |
-| GET/POST | `/api/v1/leaves` | Bearer (+ Admin/HR for write) | Cuti tahunan (annual leave) records — 12 days/year quota, see Payroll rules below |
-| GET | `/api/v1/leaves/balance?employee_id=&year=` | Bearer | Remaining annual leave days for an employee |
-| GET/DELETE | `/api/v1/leaves/{id}` | Bearer (+ Admin/HR for delete) | Detail / cancel a leave record |
-| GET | `/api/v1/payroll/monthly?year=&month=&department_id=` | Bearer, Admin/HR | Monthly late-arrival deduction report — see Payroll rules below |
-| GET/POST/PUT/DELETE | `/api/v1/users`, `/users/{id}` | Bearer, **SUPER_ADMIN only** | Dashboard account management (Phase 6) |
-| POST | `/api/v1/users/{id}/reset-password` | Bearer, SUPER_ADMIN only | Issues a new one-time generated password |
-| GET | `/api/v1/audit-logs` | Bearer, SUPER_ADMIN only | Read-only audit trail (Phase 6) |
+|| Method | Path | Auth | Description |
+||---|---|---|---|
+|| GET | `/health` | — | Liveness + database connectivity check |
+|| POST | `/api/v1/auth/login` | — | Email + password → access + refresh token |
+|| POST | `/api/v1/auth/refresh` | — | Rotates a valid refresh token for a new pair |
+|| POST | `/api/v1/auth/logout` | — | Revokes a refresh token |
+|| GET | `/api/v1/auth/me` | Bearer | Current authenticated user's profile |
+|| GET/POST | `/api/v1/departments`, `/positions`, `/shifts`, `/employees`, `/schedules`, `/devices` | Bearer (+ role for writes) | Master data CRUD |
+|| GET/PUT/DELETE | `.../{id}` | Bearer (+ role for writes) | Detail / update / delete per resource above |
+|| GET/PUT | `/api/v1/company-schedule` | Bearer (+ Admin/HR for write) | Company-wide default weekly schedule |
+|| POST | `/api/v1/devices/register` | Bearer, Admin+ | Register a Fingerspot device |
+|| GET | `/api/v1/attendance`, `/attendance/{id}` | Bearer | Attendance history (dashboard) |
+|| GET | `/api/v1/reports/monthly` | Bearer | Monthly attendance report (JSON, or `.xlsx` with `?format=xlsx`) |
+|| GET/POST | `/api/v1/leaves` | Bearer (+ Admin/HR for write) | Cuti tahunan (annual leave) records |
+|| GET | `/api/v1/leaves/balance?employee_id=&year=` | Bearer | Remaining annual leave days for an employee |
+|| GET/DELETE | `/api/v1/leaves/{id}` | Bearer (+ Admin/HR for delete) | Detail / cancel a leave record |
+|| GET | `/api/v1/payroll/monthly?year=&month=&department_id=` | Bearer, Admin/HR | Monthly late-arrival deduction report |
+|| GET/POST/PUT/DELETE | `/api/v1/users`, `/users/{id}` | Bearer, **SUPER_ADMIN only** | Dashboard account management |
+|| POST | `/api/v1/users/{id}/reset-password` | Bearer, SUPER_ADMIN only | Issues a new one-time generated password |
+|| GET | `/api/v1/audit-logs` | Bearer, SUPER_ADMIN only | Read-only audit trail |
 
 Every response uses the same envelope:
 
@@ -204,19 +232,81 @@ Every response uses the same envelope:
 { "success": false, "message": "...", "errors": { ... } }
 ```
 
-Employee, attendance, device, and report endpoints are added as their
-respective phases land — see [Development Phases](#development-phases).
+## Fingerspot Integration
 
-### Authentication
+### Architecture
+
+The system uses a device-agnostic integration layer with a mock adapter for development:
+
+```
+Device Integration Interface
+         ↓
+Fingerspot Adapter (Mock/Real)
+         ↓
+Fingerspot SDK/API
+```
+
+### Configuration
+
+Enable Fingerspot integration in `.env`:
+
+```env
+FINGERSPOT_ENABLED=true
+FINGERSPOT_DEVICE_IP=192.168.1.202
+FINGERSPOT_DEVICE_PORT=5005
+FINGERSPOT_SYNC_INTERVAL=5m
+```
+
+**Important:** For development, the system uses a mock adapter that simulates device behavior. When official Fingerspot SDK/API documentation is available, implement the real adapter in `backend/internal/fingerspot/`.
+
+### Device Management
+
+Register Fingerspot devices through the dashboard or API:
+
+```json
+POST /api/v1/devices/register
+{
+  "device_name": "Fingerspot Main Entrance",
+  "device_code": "FS-001",
+  "location": "Main Office",
+  "device_type": "FINGERSPOT",
+  "serial_number": "FS-SN-12345",
+  "ip_address": "192.168.1.202",
+  "port": 5005
+}
+```
+
+### Employee-Device Mapping
+
+Map employees to device user IDs:
+
+```json
+PUT /api/v1/employees/{id}
+{
+  "device_user_id": "USER001",
+  "biometric_id": "FP-001"
+}
+```
+
+### Sync Process
+
+Attendance data is synchronized from Fingerspot devices to the SIG backend:
+
+1. Device stores attendance logs locally
+2. Backend initiates sync (manual or scheduled)
+3. Integration layer fetches logs via SDK/API
+4. Logs are validated and processed
+5. Processed attendance data is stored in database
+6. Sync status is tracked for monitoring
+
+## Authentication
 
 - Access tokens are short-lived JWTs (HS256, default 15m, `ACCESS_TOKEN_TTL`)
   sent as `Authorization: Bearer <token>`.
 - Refresh tokens are opaque random strings (not JWTs) tracked server-side by
   SHA-256 hash in `refresh_tokens`, default 7 days (`REFRESH_TOKEN_TTL`).
   Every `/auth/refresh` call **rotates** the token — the presented one is
-  revoked and a new one issued — so a leaked-but-unused refresh token can be
-  replayed at most once before the legitimate client's next refresh locks
-  the attacker out.
+  revoked and a new one issued.
 - `/auth/login` and `/auth/refresh` are rate-limited per client IP
   (in-process, no Redis — see `internal/middleware/ratelimit.go`) as a basic
   brute-force guard.
@@ -224,10 +314,10 @@ respective phases land — see [Development Phases](#development-phases).
   route with `middleware.AuthRequired(jwtManager)` followed by
   `middleware.RequireRole(rbac.Admin, rbac.HR, ...)`.
 
-### Seeding the first admin account
+## Seeding the First Admin Account
 
 There is no public registration endpoint — dashboard accounts are created by
-an admin (Phase 3+) or bootstrapped with:
+an admin or bootstrapped with:
 
 ```bash
 cd backend
@@ -236,294 +326,101 @@ SEED_ADMIN_EMAIL=admin@suryaintigas.com SEED_ADMIN_PASSWORD='ChangeMe123!' go ru
 docker compose exec -e SEED_ADMIN_EMAIL=admin@suryaintigas.com -e SEED_ADMIN_PASSWORD='ChangeMe123!' backend ./seed
 ```
 
-Re-running it just resets that account's password (idempotent, matched on
-email). Omitted values fall back to a logged development default — refused
-outright when `APP_ENV=production`.
-
-### Master data (Phase 3)
+## Master Data
 
 Every `/api/v1/*` route below `GET /health` requires `Authorization: Bearer
 <access_token>`. List/detail (`GET`) is open to any authenticated role;
 mutations follow this matrix:
 
-| Resource | Create / Update / Delete |
-|---|---|
-| Departments, Positions | `SUPER_ADMIN`, `ADMIN` |
-| Shifts, Employees, Schedules, Company schedule | `SUPER_ADMIN`, `ADMIN`, `HR` |
-| Devices | `SUPER_ADMIN`, `ADMIN` |
+|| Resource | Create / Update / Delete |
+||---|---|
+|| Departments, Positions | `SUPER_ADMIN`, `ADMIN` |
+|| Shifts, Employees, Schedules, Company schedule | `SUPER_ADMIN`, `ADMIN`, `HR` |
+|| Devices | `SUPER_ADMIN`, `ADMIN` |
 
-Notes:
+**Notes:**
 
 - **Employees** are soft-deleted (`deleted_at`), never hard-deleted —
-  attendance history (Phase 4) references them, and reports must still see
-  someone who has left the company. `DELETE /employees/:id` deactivates.
-- **Shifts** store `start_time`/`end_time` as `"HH:MM"` strings, not a native
-  SQL time type — see `internal/shift`. `is_overnight` is derived
-  automatically (e.g. `22:00 → 06:00`) for Phase 4's late/duration math.
-- **Schedules** (`work_schedules`) give *one employee* a different shift on
-  a specific ISO weekday (`day_of_week`: 1=Monday..7=Sunday) — the
-  per-employee exception layer.
-- **Company schedule** (`company_schedules`, `GET/PUT /company-schedule`) is
-  the company-wide default: which shift each weekday resolves to for
-  *every* employee. `PUT` replaces the whole week at once; a day sent with
-  `"shift_id": null` is a non-working day (check-in refused). See Attendance
-  below for how the three layers combine.
-- **Devices**: `status` (`ACTIVE`/`INACTIVE`) is admin-controlled
-  registration state; `is_online` in the API response is *derived* from how
-  recently `last_seen_at` was updated (`internal/device.OnlineThreshold`,
-  5 minutes) — never stored, so it can't go stale.
-- Deleting a Department/Position/Shift that's still assigned to an active
-  employee (or, for Shifts, an active schedule) is refused with a `409`
-  rather than silently orphaning the reference.
+  attendance history references them, and reports must still see
+  someone who has left the company.
+- **Devices** now support Fingerspot-specific configuration including IP address, port, and connection status.
+- **Employees** can be mapped to device user IDs for Fingerspot integration.
 
-### Attendance (Phase 4)
+## Attendance Processing
 
-`POST /attendance/check-in` and `/check-out` are the two endpoints the
-Flutter tablet app (Phase 5) will call once it has resolved an employee via
-face recognition. They are **not** behind `Authorization: Bearer` — a
-kiosk tablet has no dashboard login. Instead, per the spec, the trust
-boundary is the registered `device_code` every request must present:
+Attendance data from Fingerspot devices is processed through the sync service:
 
-```json
-{ "employee_id": "<uuid>", "device_code": "TAB-001" }
-```
+1. **Validation**: Device and employee validation
+2. **Shift Resolution**: Determine employee's shift for the attendance date
+3. **Late Calculation**: Calculate late minutes based on shift start time
+4. **Idempotency**: Prevent duplicate attendance records
+5. **Storage**: Store both raw logs (`attendance_logs`) and processed data (`attendances`)
 
-The backend re-validates everything itself, trusting nothing from the
-client except which employee/device it claims to be:
-
-1. Employee exists and `status = ACTIVE`
-2. Device exists and `status = ACTIVE` (unregistered/deactivated tablets are rejected)
-3. Employee's shift for *today* is resolved, in priority order:
-   **(a)** a per-employee `work_schedules` override for today's ISO weekday,
-   **(b)** the company-wide `company_schedules` default for that weekday —
-   where a weekday configured with no shift is a non-working day and the
-   check-in is refused with a `422`, **(c)** the employee's own default
-   `employees.shift_id`. Nothing at any level is a `422` ("belum memiliki
-   shift atau jadwal"). A weekday with no `company_schedules` row at all
-   skips straight to (c), so an install that never sets a company schedule
-   behaves exactly as before this layer existed.
-4. Check-in timestamp is always the **server clock** in `Asia/Jakarta`
-   (hardcoded — the company operates in one timezone), never the tablet's,
-   since a client clock isn't trusted for something that affects
-   late/payroll calculations
-5. On-time vs. late is `now` vs. the shift's `start_time` + `late_tolerance_minutes`;
-   `late_minutes` counts every minute past the official start (not just past
-   tolerance)
-6. One attendance row per employee per calendar day (`UNIQUE(employee_id, attendance_date)`) —
-   a second check-in the same day is a `409`, which doubles as the
-   idempotency guard Phase 5's offline sync will rely on
-7. Check-out finds the employee's most recent **open** record (no
-   `check_out_at` yet) regardless of its date, so an overnight shift
-   crossing midnight still resolves correctly, and computes
-   `working_duration_minutes`
-
-`GET /attendance` (history) and `/attendance/{id}` **are** behind
-`Authorization: Bearer` like every other dashboard read — any authenticated
-role can view them. Filters: `employee_id`, `status`, `date_from`,
-`date_to` (`YYYY-MM-DD`), plus the standard `page`/`page_size`.
-
-Stored `status` values are only ever `ON_TIME`, `LATE`, `CHECKED_OUT` —
-`ABSENT` and `INCOMPLETE` (an employee with no row for a day, or a
-check-in with no check-out well past shift end) are **derived**, not
-written by a background job. `ABSENT` is materialised by the monthly
-report (see below).
-
-Note: `attendances.status` becomes `CHECKED_OUT` after check-out, which
-overwrites the earlier `ON_TIME`/`LATE`. `late_minutes` is **not**
-overwritten, so "was this person late that day" is read from
-`late_minutes > 0`, not from `status`, once they've checked out.
-
-### Reports (`internal/report`)
+## Reports
 
 `GET /api/v1/reports/monthly?month=YYYY-MM[&department_id=<uuid>][&format=xlsx]`
-— any authenticated role, like attendance history.
+— any authenticated role.
 
 - Without `format`, returns JSON: per employee, a `days[]` grid (one cell
   per calendar day, status `ON_TIME`/`LATE`/`ABSENT`/`OFF`/`PENDING`) plus
-  month totals (`on_time`, `late_count`, `late_minutes`, `absent`,
-  `working_days`).
-- `format=xlsx` streams a three-sheet workbook (`github.com/xuri/excelize`):
-  **Ringkasan** (per-employee totals), **Detail Harian** (the day grid:
-  `H` = on time, `T15` = 15 min late, `A` = absent, blank = non-working /
-  future), **Keterangan** (legend).
-- `ABSENT` is derived here: for each employee × each past calendar day, if
-  it resolves to a working day (same three layers as
-  `attendance.resolveShift`: per-employee `work_schedules` → company
-  `company_schedules` → `employees.shift_id`) and there is no attendance
-  row, that day is counted absent. Today and future working days are
-  `PENDING`, never absent.
+  month totals.
+- `format=xlsx` streams a three-sheet workbook: **Ringkasan**, **Detail Harian**, **Keterangan**.
 
-> **Security note:** an unauthenticated write endpoint gated only by a
-> device code is an acceptable trust model for tablets on the office's own
-> network, but should sit behind additional network controls (VPN/firewall
-> to that network) before ever being reachable from the public internet —
-> see Phase 8's deployment notes once written.
+## Payroll Rules
 
-### Payroll rules (`internal/leave`, `internal/payroll`)
+- **Cuti tahunan (annual leave):** 12 paid days per employee per calendar year.
+- **Late-arrival deductions:** 1–10 minutes late → Rp 20,000; 11–30 minutes → Rp 50,000; 31+ minutes → half a day's pay.
 
-Not part of the phased spec above — added on top of it as company payroll
-policy:
+## Documentation
 
-- **Cuti tahunan (annual leave):** 12 paid days per employee per calendar
-  year. HR/Admin records a leave period (`POST /api/v1/leaves`); the
-  service rejects a request that would push the employee's `ACTIVE` days
-  for that year past 12 (`leave.AnnualQuotaDays`). Cancelling
-  (`DELETE /api/v1/leaves/{id}`) frees the days back up without deleting
-  the record. There is no employee self-service flow — same posture as
-  employee/device master data.
-- **Late-arrival deductions**, computed per attendance day from
-  `attendances.late_minutes` and the employee's `base_salary` ("Gaji
-  Pokok"): 1–10 minutes late → flat Rp 20,000; 11–30 minutes → flat
-  Rp 50,000; 31+ minutes → half a day's pay (`base_salary / 26 / 2`). See
-  `payroll.ComputeLateDeduction`'s doc comment for what the 31+ tier does
-  and doesn't cover.
-- `GET /api/v1/payroll/monthly?year=&month=&department_id=` (Admin/HR
-  only — it reads `base_salary`) returns, per active employee, the
-  month's late-day count, total deduction, resulting net salary, and
-  annual leave used/remaining.
-
-### User management & audit trail (Phase 6 backend support)
-
-Built ahead of the Next.js dashboard itself so `/users` and `/audit-logs`
-are functional from day one of Phase 6, not stubbed pages waiting on a
-later backend change.
-
-- **`internal/user`** manages dashboard accounts (distinct from
-  `internal/auth`, which owns login/session mechanics against the same
-  `users` table). Every mutating endpoint is **SUPER_ADMIN-only** — unlike
-  master data, where SUPER_ADMIN and ADMIN are equally trusted, an ADMIN
-  being able to create or promote other ADMIN/SUPER_ADMIN accounts would be
-  a privilege-escalation path.
-- `POST /users` accepts an optional `password`; omitted, the server
-  generates one and returns it **once**, in that response's
-  `generated_password` field — never stored in plaintext, never
-  retrievable again. `POST /users/{id}/reset-password` follows the same
-  one-time handoff.
-- `DELETE /users/{id}` deactivates (`is_active = false`), never hard-deletes
-  — same soft-delete-by-status pattern as Employees and Devices — so a
-  removed account's history (created master data, audit-log entries) is
-  never orphaned.
-- **`internal/auditlog`** is an append-only trail: `Service.Record` is
-  called by other modules after a mutation succeeds, never exposed for
-  writes over HTTP — `GET /audit-logs` (SUPER_ADMIN only) is the only route.
-  A record failure never fails the mutation that triggered it (logged for
-  operators instead) — the audit trail must not become a reason a real
-  action fails.
-- Wired up so far: every login attempt (success, wrong password, unknown
-  email, inactive account), every `user` mutation, every `device` mutation
-  (register/update/delete — including activate/deactivate, which is just an
-  `Update` with a changed `status`), every `employee` mutation
-  (create/update/deactivate), and every `company_schedule` save.
-  Departments/positions/shifts/schedules don't call it yet — follow the same
-  `auditlog.Service.Record(...)` call already in `auth.Service.Login`,
-  `user.Service`, `device.Service`, `employee.Service`, and
-  `companyschedule.Service` to extend coverage as needed.
-- Every audited module's handler builds its `auditlog.Actor{ID, Name, Role,
-  IP}` straight from the JWT claims `middleware.AuthRequired` already put in
-  the request context — no per-request database lookup for the actor's
-  display name, because the access token itself carries it (`pkg/jwt.Claims.
-  Name`, populated at login/refresh time). `Actor` is defined once in
-  `internal/auditlog` and type-aliased from `user`/`device`/`employee` so
-  none of those modules needs to depend on each other.
-
-## Testing
-
-```bash
-cd backend
-go build ./...   # compiles everything
-go vet ./...     # static analysis
-go test ./...    # unit tests — auth service + JWT covered from Phase 2 onward
-```
-
-### Phase 7 — integration test status
-
-End-to-end verification across backend + tablet + dashboard. Done so far:
-
-- ✅ 4 core scenarios (register device → face enrol → check-in → check-out →
-  dashboard history; late check-in; duplicate check-in rejected; offline
-  sync replay).
-- ✅ Bug fixed: `/auth/login` + `/auth/refresh` rate limiter counted the
-  dashboard's own requests per shared proxy IP, locking real users out
-  (`31d1a1e`).
-- ✅ Gap closed: audit trail now covers device + employee mutations
-  (`1acf0af`), not just auth/users.
-- ✅ **Overnight shift (22:00 → 06:00):** late calculation was wrong for a
-  check-in *after midnight* — measured against the coming night's 22:00
-  instead of the previous night's, so a 2½-hour-late arrival was recorded
-  on-time. Fixed in `internal/attendance` (`computeCheckInStatus`), covered
-  by `TestComputeCheckInStatus_OvernightShift`.
-- ✅ **Schedule override (`work_schedules`):** a per-weekday override now
-  verified to win over `employees.shift_id`, to fall back to the default
-  shift on days with no override, and to let a shift-less employee check in
-  on a day that has one. Covered by `TestService_CheckIn_*ScheduleOverride*`.
-- ✅ **Company-wide default schedule (`company_schedules`):** new middle
-  layer in shift resolution (per-employee override → company schedule →
-  employee default). A company weekday with no shift is a non-working day
-  (`ErrDayOff`, `422`); a per-employee override still lets an individual
-  work a company day off. Covered by
-  `TestService_ResolveShift_CompanySchedulePriority` and
-  `internal/companyschedule`'s service tests.
-- ✅ **Monthly attendance report + Excel export (`internal/report`):**
-  per-employee on-time / late (with minutes) / absent totals for a month,
-  with a day-by-day grid, downloadable as `.xlsx`. `ABSENT` is derived by
-  walking every past working day (same three shift-resolution layers as
-  check-in). Covered by `internal/report`'s service tests + an xlsx smoke
-  test.
-
-**Company working hours** (PT Surya Inti Gas — 50–200 employees, one shared
-pattern — set once in the dashboard's **Jam Kerja** page):
-
-| Day | Hours | How it's configured |
-|---|---|---|
-| Mon–Fri | 08:00–16:00 | `company_schedules` → "Reguler" shift |
-| Saturday | 08:00–14:00 | `company_schedules` → "Sabtu" shift |
-| Sunday | off | `company_schedules` row with `shift_id NULL` — check-in refused |
-
-Every employee (including new hires) follows this automatically; a personal
-`work_schedules` row is only needed for someone whose hours differ.
-`TestService_ResolveShift_CompanyWeeklySchedule` still covers the older
-"Saturday via per-employee `work_schedules`" arrangement, which also works.
-
-No overnight/night shift is in use, so the limitation below does not affect
-current operations.
-
-Known limitations (deferred):
-
-- Overtime ("lembur") and night-shift hours are not defined by the company
-  yet. There is no separate overtime concept in the system — check-out only
-  records actual worked minutes; HR would compute overtime from that. If
-  dedicated overtime tracking/approval is needed later it's a new feature to
-  scope.
-- If a night/overnight shift is ever added *and* driven by a per-weekday
-  `work_schedules` override, note the override is keyed on the weekday the
-  shift **starts** — a post-midnight check-in resolves against the new day's
-  weekday, so it needs a row on that day too (or a matching default shift).
-- Kiosk lock-down mode on the tablet is not built (deferred from Phase 5).
-
-## Docker Deployment
-
-`docker-compose.yml` builds `backend/Dockerfile` (multi-stage, distroless
-runtime, non-root user) against `postgres:16-alpine`. `web` (Next.js) and
-`nginx` (reverse proxy + HTTPS) are appended to this file in Phases 6 and 8.
-
-## Production Deployment (planned — Phase 8)
-
-Target: a single VPS running Docker Compose, with Nginx terminating HTTPS
-and reverse-proxying to the `backend` and `web` containers. Documented fully
-once Phase 8 starts; do not treat the current `docker-compose.yml` as
-production-hardened yet (default passwords in `.env.example`, no TLS).
+- [Architecture Documentation](docs/architecture.md) - System architecture and components
+- [Fingerspot Integration](docs/fingerspot-integration.md) - Fingerspot device integration details
+- [Database Schema](docs/database.md) - Database structure and relationships
 
 ## Security Notes
 
-- Passwords are never stored or logged in plaintext (bcrypt, from Phase 2).
-- JWT secrets and database credentials are environment variables only, never
-  committed (see `.gitignore`).
-- The backend re-validates every attendance request from the tablet
-  (employee ID, device ID, timestamp, shift, schedule) — client data is
-  never trusted as-is.
-- Biometric data (face embeddings) is treated as sensitive data; see the
-  Flutter app's design once Phase 5 lands.
+- Device communication should be secured on private networks with VPN/firewall
+- Never commit real Fingerspot API credentials to the repository
+- Use environment variables for all sensitive configuration
+- Regular database backups are essential
+- Audit trail is enabled for all critical operations
 
-## License
+## Troubleshooting
 
-Proprietary — internal system for PT Surya Inti Gas. Not for redistribution.
+### Device Connection Issues
+
+Use the provided PowerShell script to check device connectivity:
+
+```powershell
+.\cek-device.ps1
+```
+
+This will check:
+- Local IP configuration
+- Device ping response
+- Port availability (default 5005 or 4370)
+
+### Sync Issues
+
+Check sync status in the dashboard or database:
+
+```sql
+SELECT * FROM sync_status 
+WHERE device_id = 'device-uuid' 
+ORDER BY started_at DESC 
+LIMIT 10;
+```
+
+### Common Errors
+
+- **Device not connecting**: Check IP address, port, and network connectivity
+- **Sync failing**: Review error messages in sync_status table
+- **Employee mapping issues**: Verify device_user_id matches between device and employee records
+
+## Future Enhancements
+
+- Real-time attendance sync via WebSocket
+- Mobile app for employee self-service
+- Advanced analytics and reporting
+- Multi-location support
+- Integration with payroll system
