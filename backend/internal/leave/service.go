@@ -16,9 +16,14 @@ import (
 // AnnualQuotaDays.
 var ErrQuotaExceeded = errors.New("leave: annual leave quota exceeded")
 
+// ErrInvalidType is returned by Request for a type outside TypeCuti,
+// TypeIzin and TypeSakit.
+var ErrInvalidType = errors.New("leave: invalid leave type")
+
 // Input bundles the caller-supplied fields of a leave request.
 type Input struct {
 	EmployeeID uuid.UUID
+	Type       string // TypeCuti, TypeIzin or TypeSakit; empty means TypeCuti
 	StartDate  time.Time
 	EndDate    time.Time
 	Reason     string
@@ -36,23 +41,42 @@ func NewService(repo Repository, audit *auditlog.Service) *Service {
 	return &Service{repo: repo, audit: audit}
 }
 
-// Request records a new leave period, after checking it fits within the
+// Request records a new leave period. A cuti must fit within the
 // employee's remaining annual quota (AnnualQuotaDays per calendar year, per
-// company policy). start and end are inclusive calendar dates, so a single
-// day off has start == end and DaysCount == 1.
+// company policy); izin and sakit have no quota. No type may overlap an
+// already-active leave, so a day is never counted twice. start and end are
+// inclusive calendar dates, so a single day off has start == end and
+// DaysCount == 1.
 func (s *Service) Request(ctx context.Context, actor Actor, in Input) (*Leave, error) {
+	if in.Type == "" {
+		in.Type = TypeCuti
+	}
+	if !ValidType(in.Type) {
+		return nil, ErrInvalidType
+	}
 	days := int(in.EndDate.Sub(in.StartDate).Hours()/24) + 1
 
-	used, err := s.repo.SumActiveDays(ctx, in.EmployeeID, in.StartDate.Year())
+	overlap, err := s.repo.HasActiveOverlap(ctx, in.EmployeeID, in.StartDate, in.EndDate)
 	if err != nil {
 		return nil, err
 	}
-	if used+days > AnnualQuotaDays {
-		return nil, ErrQuotaExceeded
+	if overlap {
+		return nil, ErrOverlap
+	}
+
+	if in.Type == TypeCuti {
+		used, err := s.repo.SumActiveDays(ctx, in.EmployeeID, in.StartDate.Year())
+		if err != nil {
+			return nil, err
+		}
+		if used+days > AnnualQuotaDays {
+			return nil, ErrQuotaExceeded
+		}
 	}
 
 	l := &Leave{
 		EmployeeID: in.EmployeeID,
+		Type:       in.Type,
 		StartDate:  in.StartDate,
 		EndDate:    in.EndDate,
 		DaysCount:  days,
@@ -64,7 +88,7 @@ func (s *Service) Request(ctx context.Context, actor Actor, in Input) (*Leave, e
 	}
 
 	s.audit.Record(ctx, actor.ID, actor.Name, actor.Role, auditlog.ActionCreate, "leave", l.ID.String(),
-		"Mencatat cuti "+l.EmployeeName+" ("+l.StartDate.Format("2006-01-02")+" s/d "+l.EndDate.Format("2006-01-02")+")", actor.IP)
+		"Mencatat "+TypeLabel(l.Type)+" "+l.EmployeeName+" ("+l.StartDate.Format("2006-01-02")+" s/d "+l.EndDate.Format("2006-01-02")+")", actor.IP)
 	return l, nil
 }
 
@@ -86,6 +110,18 @@ func (s *Service) Cancel(ctx context.Context, actor Actor, id uuid.UUID) error {
 	s.audit.Record(ctx, actor.ID, actor.Name, actor.Role, auditlog.ActionDelete, "leave", id.String(),
 		"Membatalkan cuti", actor.IP)
 	return nil
+}
+
+// TypeLabel is the Indonesian display name of a leave type.
+func TypeLabel(t string) string {
+	switch t {
+	case TypeIzin:
+		return "izin"
+	case TypeSakit:
+		return "sakit"
+	default:
+		return "cuti"
+	}
 }
 
 // Balance reports how many of the employee's AnnualQuotaDays for year

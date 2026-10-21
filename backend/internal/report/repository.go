@@ -26,6 +26,14 @@ type AttendanceRow struct {
 	LateMinutes int
 }
 
+// LeaveRow is one active cuti/izin/sakit overlapping the reported range.
+type LeaveRow struct {
+	EmployeeID uuid.UUID
+	Type       string    // CUTI, IZIN or SAKIT
+	StartDate  time.Time // DATE — use Day()/Month()/Year() only
+	EndDate    time.Time // DATE, inclusive
+}
+
 type Repository interface {
 	// ActiveEmployees lists active (non-deleted) employees, ordered by
 	// employee_number, optionally scoped to one department.
@@ -41,6 +49,9 @@ type Repository interface {
 	// AttendanceInRange returns every attendance row with attendance_date in
 	// [from, to], optionally scoped to one department.
 	AttendanceInRange(ctx context.Context, from, to time.Time, departmentID *uuid.UUID) ([]AttendanceRow, error)
+	// LeavesInRange returns every ACTIVE leave whose [start_date, end_date]
+	// overlaps [from, to], optionally scoped to one department.
+	LeavesInRange(ctx context.Context, from, to time.Time, departmentID *uuid.UUID) ([]LeaveRow, error)
 }
 
 type PostgresRepository struct {
@@ -140,6 +151,32 @@ func (r *PostgresRepository) AttendanceInRange(ctx context.Context, from, to tim
 			return nil, err
 		}
 		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+func (r *PostgresRepository) LeavesInRange(ctx context.Context, from, to time.Time, departmentID *uuid.UUID) ([]LeaveRow, error) {
+	q := `
+		SELECT l.employee_id, l.leave_type, l.start_date, l.end_date
+		FROM leaves l
+		WHERE l.status = 'ACTIVE' AND l.start_date <= $2 AND l.end_date >= $1
+		  AND ($3::uuid IS NULL OR l.employee_id IN (
+		    SELECT id FROM employees WHERE department_id = $3
+		  ))`
+
+	rows, err := r.db.Query(ctx, q, from, to, departmentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []LeaveRow
+	for rows.Next() {
+		var l LeaveRow
+		if err := rows.Scan(&l.EmployeeID, &l.Type, &l.StartDate, &l.EndDate); err != nil {
+			return nil, err
+		}
+		out = append(out, l)
 	}
 	return out, rows.Err()
 }

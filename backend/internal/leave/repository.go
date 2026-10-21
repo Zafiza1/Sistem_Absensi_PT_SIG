@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -18,12 +19,18 @@ var (
 	ErrNotFound         = errors.New("leave: not found")
 	ErrInvalidEmployee  = errors.New("leave: employee not found")
 	ErrAlreadyCancelled = errors.New("leave: already cancelled")
+	ErrOverlap          = errors.New("leave: overlaps an existing active leave")
 )
 
 // Filter narrows List() results. Zero-value fields are ignored.
 type Filter struct {
 	EmployeeID *uuid.UUID
 	Status     string
+	Type       string
+	// DateFrom/DateTo keep leaves whose [start_date, end_date] overlaps the
+	// given range (either bound may be nil).
+	DateFrom *time.Time
+	DateTo   *time.Time
 }
 
 type Repository interface {
@@ -31,10 +38,14 @@ type Repository interface {
 	FindByID(ctx context.Context, id uuid.UUID) (*Leave, error)
 	List(ctx context.Context, f Filter, p pagination.Params) ([]Leave, int64, error)
 	Cancel(ctx context.Context, id uuid.UUID) error
-	// SumActiveDays returns the total days_count of ACTIVE leave rows for
+	// SumActiveDays returns the total days_count of ACTIVE cuti rows for
 	// employeeID whose start_date falls in calendar year — the figure
-	// Service.Request checks against AnnualQuotaDays.
+	// Service.Request checks against AnnualQuotaDays. Izin/sakit rows are
+	// excluded: they don't consume the quota.
 	SumActiveDays(ctx context.Context, employeeID uuid.UUID, year int) (int, error)
+	// HasActiveOverlap reports whether employeeID already has an ACTIVE
+	// leave (of any type) covering any day in [start, end].
+	HasActiveOverlap(ctx context.Context, employeeID uuid.UUID, start, end time.Time) (bool, error)
 }
 
 type PostgresRepository struct {
@@ -46,7 +57,7 @@ func NewPostgresRepository(db *pgxpool.Pool) *PostgresRepository {
 }
 
 const leaveColumns = `
-	l.id, l.employee_id, l.start_date, l.end_date, l.days_count, l.reason, l.status,
+	l.id, l.employee_id, l.leave_type, l.start_date, l.end_date, l.days_count, l.reason, l.status,
 	l.created_at, l.updated_at, e.name, e.employee_number`
 
 const leaveFrom = `
@@ -58,7 +69,7 @@ const baseSelect = "SELECT " + leaveColumns + leaveFrom
 func scanLeave(row pgx.Row, l *Leave) error {
 	var reason *string
 	err := row.Scan(
-		&l.ID, &l.EmployeeID, &l.StartDate, &l.EndDate, &l.DaysCount, &reason, &l.Status,
+		&l.ID, &l.EmployeeID, &l.Type, &l.StartDate, &l.EndDate, &l.DaysCount, &reason, &l.Status,
 		&l.CreatedAt, &l.UpdatedAt, &l.EmployeeName, &l.EmployeeNumber,
 	)
 	if reason != nil {
@@ -69,11 +80,11 @@ func scanLeave(row pgx.Row, l *Leave) error {
 
 func (r *PostgresRepository) Create(ctx context.Context, l *Leave) error {
 	const q = `
-		INSERT INTO leaves (employee_id, start_date, end_date, days_count, reason, status)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO leaves (employee_id, leave_type, start_date, end_date, days_count, reason, status)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING id, created_at, updated_at`
 
-	err := r.db.QueryRow(ctx, q, l.EmployeeID, l.StartDate, l.EndDate, l.DaysCount, nullIfEmpty(l.Reason), l.Status).
+	err := r.db.QueryRow(ctx, q, l.EmployeeID, l.Type, l.StartDate, l.EndDate, l.DaysCount, nullIfEmpty(l.Reason), l.Status).
 		Scan(&l.ID, &l.CreatedAt, &l.UpdatedAt)
 	if dberr.IsForeignKeyViolation(err) {
 		return ErrInvalidEmployee
@@ -123,6 +134,15 @@ func (r *PostgresRepository) List(ctx context.Context, f Filter, p pagination.Pa
 	if f.Status != "" {
 		conditions = append(conditions, "l.status = "+arg(f.Status))
 	}
+	if f.Type != "" {
+		conditions = append(conditions, "l.leave_type = "+arg(f.Type))
+	}
+	if f.DateFrom != nil {
+		conditions = append(conditions, "l.end_date >= "+arg(*f.DateFrom))
+	}
+	if f.DateTo != nil {
+		conditions = append(conditions, "l.start_date <= "+arg(*f.DateTo))
+	}
 
 	q := "SELECT " + leaveColumns + ", COUNT(*) OVER() AS total" + leaveFrom +
 		" WHERE " + strings.Join(conditions, " AND ") +
@@ -144,7 +164,7 @@ func (r *PostgresRepository) List(ctx context.Context, f Filter, p pagination.Pa
 			reason *string
 		)
 		if err := rows.Scan(
-			&l.ID, &l.EmployeeID, &l.StartDate, &l.EndDate, &l.DaysCount, &reason, &l.Status,
+			&l.ID, &l.EmployeeID, &l.Type, &l.StartDate, &l.EndDate, &l.DaysCount, &reason, &l.Status,
 			&l.CreatedAt, &l.UpdatedAt, &l.EmployeeName, &l.EmployeeNumber, &total,
 		); err != nil {
 			return nil, 0, err
@@ -182,11 +202,23 @@ func (r *PostgresRepository) SumActiveDays(ctx context.Context, employeeID uuid.
 	const q = `
 		SELECT COALESCE(SUM(days_count), 0)
 		FROM leaves
-		WHERE employee_id = $1 AND status = $2 AND EXTRACT(YEAR FROM start_date) = $3`
+		WHERE employee_id = $1 AND status = $2 AND leave_type = $3 AND EXTRACT(YEAR FROM start_date) = $4`
 
 	var sum int
-	err := r.db.QueryRow(ctx, q, employeeID, StatusActive, year).Scan(&sum)
+	err := r.db.QueryRow(ctx, q, employeeID, StatusActive, TypeCuti, year).Scan(&sum)
 	return sum, err
+}
+
+func (r *PostgresRepository) HasActiveOverlap(ctx context.Context, employeeID uuid.UUID, start, end time.Time) (bool, error) {
+	const q = `
+		SELECT EXISTS (
+			SELECT 1 FROM leaves
+			WHERE employee_id = $1 AND status = $2 AND start_date <= $4 AND end_date >= $3
+		)`
+
+	var exists bool
+	err := r.db.QueryRow(ctx, q, employeeID, StatusActive, start, end).Scan(&exists)
+	return exists, err
 }
 
 func nullIfEmpty(s string) *string {

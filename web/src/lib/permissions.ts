@@ -13,6 +13,7 @@ const WRITE_ROLES = {
   "company-schedule": ["SUPER_ADMIN", "ADMIN", "HR"],
   devices: ["SUPER_ADMIN", "ADMIN"],
   payroll: ["SUPER_ADMIN", "ADMIN", "HR"],
+  leaves: ["SUPER_ADMIN", "ADMIN", "HR"],
   users: ["SUPER_ADMIN"],
 } as const satisfies Record<string, readonly Role[]>;
 

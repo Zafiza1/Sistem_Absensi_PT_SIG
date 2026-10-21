@@ -20,6 +20,7 @@ const dateLayout = "2006-01-02"
 
 type RequestBody struct {
 	EmployeeID uuid.UUID `json:"employee_id" validate:"required"`
+	LeaveType  string    `json:"leave_type" validate:"omitempty,oneof=CUTI IZIN SAKIT"`
 	StartDate  string    `json:"start_date" validate:"required"`
 	EndDate    string    `json:"end_date" validate:"required"`
 	Reason     string    `json:"reason" validate:"omitempty,max=255"`
@@ -62,6 +63,7 @@ func (h *Handler) Create(c *gin.Context) {
 
 	l, err := h.service.Request(c.Request.Context(), h.actor(c), Input{
 		EmployeeID: req.EmployeeID,
+		Type:       req.LeaveType,
 		StartDate:  start,
 		EndDate:    end,
 		Reason:     req.Reason,
@@ -70,17 +72,27 @@ func (h *Handler) Create(c *gin.Context) {
 		writeError(c, err)
 		return
 	}
-	response.OK(c, http.StatusCreated, "Cuti berhasil dicatat", toData(l))
+	response.OK(c, http.StatusCreated, "Data "+TypeLabel(l.Type)+" berhasil dicatat", toData(l))
 }
 
 func (h *Handler) List(c *gin.Context) {
 	q := c.Request.URL.Query()
 	p := pagination.FromQuery(q)
 
-	f := Filter{Status: q.Get("status")}
+	f := Filter{Status: q.Get("status"), Type: q.Get("leave_type")}
 	if raw := q.Get("employee_id"); raw != "" {
 		if id, err := uuid.Parse(raw); err == nil {
 			f.EmployeeID = &id
+		}
+	}
+	if raw := q.Get("date_from"); raw != "" {
+		if d, err := time.Parse(dateLayout, raw); err == nil {
+			f.DateFrom = &d
+		}
+	}
+	if raw := q.Get("date_to"); raw != "" {
+		if d, err := time.Parse(dateLayout, raw); err == nil {
+			f.DateTo = &d
 		}
 	}
 
@@ -95,7 +107,7 @@ func (h *Handler) List(c *gin.Context) {
 	for i := range items {
 		list = append(list, toData(&items[i]))
 	}
-	response.OK(c, http.StatusOK, "Daftar cuti", gin.H{
+	response.OK(c, http.StatusOK, "Daftar cuti/izin/sakit", gin.H{
 		"items": list,
 		"meta":  pagination.NewMeta(p, total),
 	})
@@ -183,6 +195,10 @@ func writeError(c *gin.Context, err error) {
 		response.Fail(c, http.StatusUnprocessableEntity, "Karyawan tidak ditemukan", nil)
 	case errors.Is(err, ErrAlreadyCancelled):
 		response.Fail(c, http.StatusConflict, "Cuti sudah dibatalkan", nil)
+	case errors.Is(err, ErrInvalidType):
+		response.Fail(c, http.StatusUnprocessableEntity, "Jenis harus CUTI, IZIN atau SAKIT", nil)
+	case errors.Is(err, ErrOverlap):
+		response.Fail(c, http.StatusConflict, "Karyawan sudah tercatat cuti/izin/sakit pada tanggal tersebut", nil)
 	case errors.Is(err, ErrQuotaExceeded):
 		response.Fail(c, http.StatusUnprocessableEntity, "Sisa jatah cuti tahunan tidak mencukupi (maksimal 12 hari/tahun)", nil)
 	default:
@@ -197,6 +213,7 @@ func toData(l *Leave) gin.H {
 		"employee_id":     l.EmployeeID,
 		"employee_name":   l.EmployeeName,
 		"employee_number": l.EmployeeNumber,
+		"leave_type":      l.Type,
 		"start_date":      l.StartDate.Format(dateLayout),
 		"end_date":        l.EndDate.Format(dateLayout),
 		"days_count":      l.DaysCount,

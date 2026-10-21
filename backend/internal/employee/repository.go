@@ -53,7 +53,7 @@ func NewPostgresRepository(db *pgxpool.Pool) *PostgresRepository {
 const employeeColumns = `
 	e.id, e.employee_number, e.name, e.email, e.phone,
 	e.department_id, e.position_id, e.shift_id, e.status, e.base_salary,
-	e.device_user_id, e.biometric_id, e.device_user_data,
+	COALESCE(e.device_user_id, ''), COALESCE(e.biometric_id, ''), e.device_user_data,
 	e.created_at, e.updated_at, e.deleted_at,
 	COALESCE(d.name, ''), COALESCE(p.name, ''), COALESCE(s.name, '')`
 

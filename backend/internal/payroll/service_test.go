@@ -31,3 +31,29 @@ func TestComputeLateDeduction(t *testing.T) {
 		})
 	}
 }
+
+func TestComputeAbsentDeduction(t *testing.T) {
+	const baseSalary = int64(5_200_000) // / 26 -> 200,000/day
+	if got := ComputeAbsentDeduction(0, baseSalary); got != 0 {
+		t.Errorf("0 days = %d, want 0", got)
+	}
+	if got := ComputeAbsentDeduction(3, baseSalary); got != 600_000 {
+		t.Errorf("3 days = %d, want 600000", got)
+	}
+}
+
+func TestLateDeductionFor_PerDayRules(t *testing.T) {
+	lo, hi := 1, 10
+	rules := []DeductionRule{{RuleType: "LATE", LateMinMinutes: &lo, LateMaxMinutes: &hi, DeductionAmount: 25000, DeductionType: "FIXED"}}
+
+	if got := lateDeductionFor(rules, 5, 5_200_000); got != 25000 {
+		t.Errorf("5 min with rule = %d, want 25000", got)
+	}
+	// No rule covers 40 minutes: falls back to the built-in half-day tier.
+	if got := lateDeductionFor(rules, 40, 5_200_000); got != 100_000 {
+		t.Errorf("40 min fallback = %d, want 100000", got)
+	}
+	if got := lateDeductionFor(nil, 5, 5_200_000); got != LateTier1Amount {
+		t.Errorf("5 min no rules = %d, want %d", got, LateTier1Amount)
+	}
+}

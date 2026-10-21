@@ -40,6 +40,17 @@ func ComputeLateDeduction(lateMinutes int, baseSalary int64) int64 {
 	}
 }
 
+// ComputeAbsentDeduction returns the Rupiah deduction for absentDays
+// working days missed without cuti — izin, sakit and alpha alike, per
+// company policy — at one daily rate (base salary / WorkingDaysPerMonth)
+// each. Cuti is paid and never passed in here.
+func ComputeAbsentDeduction(absentDays int, baseSalary int64) int64 {
+	if absentDays <= 0 {
+		return 0
+	}
+	return int64(absentDays) * (baseSalary / WorkingDaysPerMonth)
+}
+
 // PayrollPeriod represents a payroll processing period (usually monthly)
 type PayrollPeriod struct {
 	ID              uuid.UUID

@@ -107,7 +107,7 @@ export interface WorkSchedule {
 }
 
 // GET /reports/monthly — the aggregated monthly attendance report.
-export type ReportDayStatus = "ON_TIME" | "LATE" | "ABSENT" | "OFF" | "PENDING";
+export type ReportDayStatus = "ON_TIME" | "LATE" | "IZIN" | "SAKIT" | "CUTI" | "ABSENT" | "OFF" | "PENDING";
 
 export interface ReportDayCell {
   day: number; // day of month, 1-based
@@ -122,11 +122,14 @@ export interface MonthlyReportEmployee {
   employee_number: string;
   name: string;
   department_name: string;
-  working_days: number; // elapsed working days = on_time + late_count + absent
+  working_days: number; // on_time + late_count + izin + sakit + cuti + absent
   on_time: number;
   late_count: number;
   late_minutes: number; // total for the month
-  absent: number;
+  izin: number;
+  sakit: number;
+  cuti: number;
+  absent: number; // alpha: no check-in and no izin/sakit/cuti recorded
   days: ReportDayCell[];
 }
 
@@ -136,6 +139,64 @@ export interface MonthlyReport {
   days_in_month: number;
   generated_at: string;
   employees: MonthlyReportEmployee[];
+}
+
+export interface ReportTotals {
+  working_days: number;
+  on_time: number;
+  late_count: number;
+  late_minutes: number;
+  izin: number;
+  sakit: number;
+  cuti: number;
+  absent: number;
+}
+
+// "How many people, for how many days" for one absence category.
+export interface Headcount {
+  people: number;
+  days: number;
+}
+
+export interface CategoryCounts {
+  late: Headcount;
+  izin: Headcount;
+  sakit: Headcount;
+  cuti: Headcount;
+  absent: Headcount;
+}
+
+export interface YearlyReportEmployee extends ReportTotals {
+  employee_id: string;
+  employee_number: string;
+  name: string;
+  department_name: string;
+  months: ReportTotals[]; // index 0 = January
+}
+
+export interface YearlyReport {
+  year: number;
+  generated_at: string;
+  summary: CategoryCounts;
+  months: (CategoryCounts & { month: number })[];
+  employees: YearlyReportEmployee[];
+}
+
+export type LeaveType = "CUTI" | "IZIN" | "SAKIT";
+
+export interface Leave {
+  id: string;
+  employee_id: string;
+  employee_name: string;
+  employee_number: string;
+  leave_type: LeaveType;
+  start_date: string; // YYYY-MM-DD
+  end_date: string; // YYYY-MM-DD, inclusive
+  days_count: number;
+  reason: string;
+  status: "ACTIVE" | "CANCELLED";
+  created_at: string;
+  updated_at: string;
 }
 
 export type DeviceStatus = "ACTIVE" | "INACTIVE";

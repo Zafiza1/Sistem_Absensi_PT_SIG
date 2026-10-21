@@ -329,6 +329,22 @@ SEED_ADMIN_EMAIL=admin@suryaintigas.com SEED_ADMIN_PASSWORD='ChangeMe123!' go ru
 docker compose exec -e SEED_ADMIN_EMAIL=admin@suryaintigas.com -e SEED_ADMIN_PASSWORD='ChangeMe123!' backend ./seed
 ```
 
+## Demo Data
+
+To try the reports (daily labelling, monthly, the year-end recap) and payroll
+before real attendance exists, generate a year of example data — 24
+employees (NIK `DEMO-001`…`DEMO-024`) in four "(Demo)" departments, with
+check-ins, lateness, izin, sakit, cuti and alpha from 1 January up to today:
+
+```bash
+cd backend
+go run ./cmd/seed-demo          # (re)create; safe to re-run
+go run ./cmd/seed-demo -clean   # remove it all again
+```
+
+It only ever touches `DEMO-` employees and their rows, and refuses to run
+with `APP_ENV=production`.
+
 ## Master Data
 
 Every `/api/v1/*` route below `GET /health` requires `Authorization: Bearer

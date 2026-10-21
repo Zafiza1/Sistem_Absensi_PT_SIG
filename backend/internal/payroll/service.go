@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/suryaintigas/absensi-backend/internal/leave"
+	"github.com/suryaintigas/absensi-backend/internal/report"
 )
 
 var (
@@ -29,12 +30,21 @@ var jakarta = func() *time.Location {
 	return loc
 }()
 
-type Service struct {
-	repo Repository
+// AttendanceSource supplies the per-employee day counts (present, izin,
+// sakit, cuti, alpha) payroll deducts from — the same figures the
+// dashboard's monthly report shows, so payslip and report never disagree.
+// *report.Service satisfies it.
+type AttendanceSource interface {
+	Monthly(ctx context.Context, year, month int, departmentID *uuid.UUID) (*report.Monthly, error)
 }
 
-func NewService(repo Repository) *Service {
-	return &Service{repo: repo}
+type Service struct {
+	repo       Repository
+	attendance AttendanceSource
+}
+
+func NewService(repo Repository, attendance AttendanceSource) *Service {
+	return &Service{repo: repo, attendance: attendance}
 }
 
 // Monthly builds the payroll deduction report for the given year and month
@@ -179,8 +189,27 @@ func (s *Service) ProcessPayrollPeriod(ctx context.Context, periodID uuid.UUID, 
 		return nil, fmt.Errorf("failed to get attendance data: %w", err)
 	}
 
+	monthly, err := s.attendance.Monthly(ctx, period.Year, period.Month, nil)
+	if err != nil {
+		period.Status = "DRAFT"
+		s.repo.UpdatePayrollPeriod(ctx, period)
+		return nil, fmt.Errorf("failed to get attendance report: %w", err)
+	}
+	totalsByEmp := make(map[uuid.UUID]report.Totals, len(monthly.Employees))
+	for _, e := range monthly.Employees {
+		totalsByEmp[e.EmployeeID] = e.Totals
+	}
+
+	// Fetched once for the whole run; on error lateDeductionFor falls back
+	// to the built-in tiers.
+	lateRules, err := s.repo.GetActiveDeductionRules(ctx)
+	if err != nil {
+		lateRules = nil
+	}
+
 	var totalGrossPay, totalNetPay, totalDeductions int64
 	var processedCount int
+	var createdItems []uuid.UUID
 
 	for _, emp := range employees {
 		item := &PayrollItem{
@@ -191,36 +220,59 @@ func (s *Service) ProcessPayrollPeriod(ctx context.Context, periodID uuid.UUID, 
 			EmployeeName:    emp.Name,
 			DepartmentName:  emp.DepartmentName,
 			BaseSalary:      emp.BaseSalary,
+			PaymentStatus:   "PENDING",
 		}
 
-		// Calculate attendance summary
+		// Calculate attendance summary. Each late day is deducted on its
+		// own tier — five 5-minute lates are five tier-1 deductions, not one
+		// 25-minute one.
 		var totalLateMinutes int
 		var lateDays int
+		var lateDeduction int64
 
 		for _, l := range lateRows {
 			if l.EmployeeID == emp.ID {
 				lateDays++
 				totalLateMinutes += l.LateMinutes
+				lateDeduction += lateDeductionFor(lateRules, l.LateMinutes, emp.BaseSalary)
 			}
 		}
 
 		item.LateDays = lateDays
 		item.LateMinutes = totalLateMinutes
-		item.PresentDays = lateDays // Simplified - in production, calculate properly
+
+		// Izin, sakit and alpha are all deducted; cuti is paid leave.
+		t := totalsByEmp[emp.ID]
+		item.WorkingDays = t.WorkingDays
+		item.PresentDays = t.OnTime + t.LateCount
+		item.AbsentDays = t.Izin + t.Sakit + t.Absent
+		item.LeaveDays = t.Cuti
+		if item.AbsentDays > 0 {
+			item.Notes = fmt.Sprintf("Izin %d, Sakit %d, Tidak Hadir %d hari", t.Izin, t.Sakit, t.Absent)
+		}
 
 		// Calculate deductions
-		item.LateDeduction = s.calculateLateDeduction(ctx, totalLateMinutes, emp.BaseSalary)
-		item.TotalDeductions = item.LateDeduction
+		item.LateDeduction = lateDeduction
+		item.AbsentDeduction = ComputeAbsentDeduction(item.AbsentDays, emp.BaseSalary)
+		item.TotalDeductions = item.LateDeduction + item.AbsentDeduction
 
 		// Calculate earnings
 		item.TotalEarnings = emp.BaseSalary
 		item.GrossPay = emp.BaseSalary
 		item.NetPay = item.GrossPay - item.TotalDeductions
 
-		// Save payroll item
+		// Save payroll item. A failure aborts the whole run (rolling back
+		// the items already written) rather than silently producing a
+		// period with missing employees.
 		if err := s.repo.CreatePayrollItem(ctx, item); err != nil {
-			continue // Skip this employee but continue with others
+			for _, id := range createdItems {
+				s.repo.DeletePayrollItem(ctx, id)
+			}
+			period.Status = "DRAFT"
+			s.repo.UpdatePayrollPeriod(ctx, period)
+			return nil, fmt.Errorf("failed to save payroll item for %s: %w", emp.EmployeeNumber, err)
 		}
+		createdItems = append(createdItems, item.ID)
 
 		totalGrossPay += item.GrossPay
 		totalNetPay += item.NetPay
@@ -346,42 +398,19 @@ func (s *Service) DeleteDeductionRule(ctx context.Context, id uuid.UUID) error {
 
 // Helper methods
 
-func (s *Service) calculateLateDeduction(ctx context.Context, totalLateMinutes int, baseSalary int64) int64 {
-	var totalDeduction int64
-
-	// Get active deduction rules
-	rules, err := s.repo.GetActiveDeductionRules(ctx)
-	if err != nil {
-		// Fallback to default calculation
-		return ComputeLateDeduction(totalLateMinutes, baseSalary)
-	}
-
-	// Calculate using rules (simplified - in production, implement proper rule matching)
-	for _, lateMinutes := range s.splitLateMinutes(totalLateMinutes) {
-		for _, rule := range rules {
-			if rule.RuleType == "LATE" {
-				if s.matchesLateRule(&rule, lateMinutes) {
-					deduction := s.calculateRuleDeduction(&rule, baseSalary)
-					totalDeduction += deduction
-					break // Use first matching rule
-				}
-			}
+// lateDeductionFor returns the deduction for one late day: the first
+// active LATE rule (by priority) whose minute range matches, or the
+// built-in ComputeLateDeduction tiers when no rule is configured.
+func lateDeductionFor(rules []DeductionRule, lateMinutes int, baseSalary int64) int64 {
+	for i := range rules {
+		if rules[i].RuleType == "LATE" && matchesLateRule(&rules[i], lateMinutes) {
+			return calculateRuleDeduction(&rules[i], baseSalary)
 		}
 	}
-
-	return totalDeduction
+	return ComputeLateDeduction(lateMinutes, baseSalary)
 }
 
-func (s *Service) splitLateMinutes(totalLateMinutes int) []int {
-	// Simplified - split into individual late instances
-	// In production, this should be based on actual attendance records
-	if totalLateMinutes == 0 {
-		return []int{}
-	}
-	return []int{totalLateMinutes}
-}
-
-func (s *Service) matchesLateRule(rule *DeductionRule, lateMinutes int) bool {
+func matchesLateRule(rule *DeductionRule, lateMinutes int) bool {
 	if rule.LateMinMinutes == nil && rule.LateMaxMinutes == nil {
 		return true
 	}
@@ -399,7 +428,7 @@ func (s *Service) matchesLateRule(rule *DeductionRule, lateMinutes int) bool {
 	return lateMinutes >= min && lateMinutes <= max
 }
 
-func (s *Service) calculateRuleDeduction(rule *DeductionRule, baseSalary int64) int64 {
+func calculateRuleDeduction(rule *DeductionRule, baseSalary int64) int64 {
 	switch rule.DeductionType {
 	case "FIXED":
 		return rule.DeductionAmount

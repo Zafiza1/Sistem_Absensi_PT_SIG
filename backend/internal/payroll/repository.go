@@ -31,8 +31,8 @@ type Repository interface {
 	// attendance_date in [from, to] and late_minutes > 0, optionally scoped
 	// to one department.
 	LateAttendanceInRange(ctx context.Context, from, to time.Time, departmentID *uuid.UUID) ([]LateRow, error)
-	// LeaveDaysByEmployee sums leave.StatusActive days_count per employee
-	// for leaves starting in year, optionally scoped to one department.
+	// LeaveDaysByEmployee sums leave.StatusActive cuti days_count per
+	// employee for leaves starting in year, optionally scoped to one department.
 	LeaveDaysByEmployee(ctx context.Context, year int, departmentID *uuid.UUID) (map[uuid.UUID]int, error)
 
 	// Payroll Period methods
@@ -124,7 +124,7 @@ func (r *PostgresRepository) LeaveDaysByEmployee(ctx context.Context, year int, 
 	q := `
 		SELECT l.employee_id, SUM(l.days_count)
 		FROM leaves l
-		WHERE l.status = 'ACTIVE' AND EXTRACT(YEAR FROM l.start_date) = $1
+		WHERE l.status = 'ACTIVE' AND l.leave_type = 'CUTI' AND EXTRACT(YEAR FROM l.start_date) = $1
 		  AND ($2::uuid IS NULL OR l.employee_id IN (
 		    SELECT id FROM employees WHERE department_id = $2
 		  ))
@@ -264,7 +264,7 @@ func (r *PostgresRepository) CreatePayrollItem(ctx context.Context, item *Payrol
 			gross_pay, net_pay, payment_status, payment_date, payment_method, payment_reference, notes
 		) VALUES (
 			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-			$16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34
+			$16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35
 		) RETURNING created_at, updated_at`
 
 	err := r.db.QueryRow(ctx, q,

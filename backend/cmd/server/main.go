@@ -242,8 +242,11 @@ func main() {
 	// Reports are dashboard reads open to any authenticated role, like
 	// attendance history. The monthly report is where ABSENT is derived
 	// (see internal/report's package doc); ?format=xlsx returns a download.
-	reportHandler := report.NewHandler(report.NewService(report.NewPostgresRepository(pool)))
+	// The yearly report is the year-end recap of izin/sakit/alpha/cuti.
+	reportService := report.NewService(report.NewPostgresRepository(pool))
+	reportHandler := report.NewHandler(reportService)
 	authed.GET("/reports/monthly", reportHandler.Monthly)
+	authed.GET("/reports/yearly", reportHandler.Yearly)
 
 	// --- Payroll rules: annual leave + late-arrival deductions -------------
 	// Cuti (annual leave) is recorded by HR/Admin, same posture as employee
@@ -262,7 +265,7 @@ func main() {
 	// Payroll deduction report reads employees.base_salary directly, so
 	// (unlike the reports above) it's restricted to adminOrHR rather than
 	// open to every authenticated role.
-	payrollHandler := payroll.NewHandler(payroll.NewService(payroll.NewPostgresRepository(pool)))
+	payrollHandler := payroll.NewHandler(payroll.NewService(payroll.NewPostgresRepository(pool), reportService))
 
 	// Payroll routes - restricted to adminOrHR
 	payrollGroup := authed.Group("/payroll")

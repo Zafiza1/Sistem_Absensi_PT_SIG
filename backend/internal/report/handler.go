@@ -34,14 +34,9 @@ func (h *Handler) Monthly(c *gin.Context) {
 	}
 	year, month := m.Year(), int(m.Month())
 
-	var departmentID *uuid.UUID
-	if v := c.Query("department_id"); v != "" {
-		id, err := uuid.Parse(v)
-		if err != nil {
-			response.Fail(c, http.StatusBadRequest, "department_id tidak valid", nil)
-			return
-		}
-		departmentID = &id
+	departmentID, ok := departmentQuery(c)
+	if !ok {
+		return
 	}
 
 	rpt, err := h.service.Monthly(c.Request.Context(), year, month, departmentID)
@@ -70,6 +65,58 @@ func (h *Handler) Monthly(c *gin.Context) {
 	response.OK(c, http.StatusOK, "Laporan kehadiran bulanan", toData(rpt))
 }
 
+// Yearly serves GET /reports/yearly?year=YYYY[&department_id=][&format=xlsx]
+// — the year-end recap. Without format=xlsx it returns JSON (summary,
+// per-month headcounts, per-employee totals); with it, an .xlsx download
+// that also carries one day-grid sheet per month.
+func (h *Handler) Yearly(c *gin.Context) {
+	y, err := time.Parse("2006", c.Query("year"))
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, "Parameter year harus format YYYY", nil)
+		return
+	}
+	departmentID, ok := departmentQuery(c)
+	if !ok {
+		return
+	}
+
+	rpt, err := h.service.Yearly(c.Request.Context(), y.Year(), departmentID)
+	if err != nil {
+		slog.Error("report_yearly_failed", slog.String("error", err.Error()))
+		response.Fail(c, http.StatusInternalServerError, "Gagal menyusun rekap tahunan", nil)
+		return
+	}
+
+	if c.Query("format") == "xlsx" {
+		buf, err := BuildYearlyXLSX(rpt)
+		if err != nil {
+			slog.Error("report_yearly_xlsx_failed", slog.String("error", err.Error()))
+			response.Fail(c, http.StatusInternalServerError, "Gagal membuat file Excel", nil)
+			return
+		}
+		c.Header("Content-Disposition", `attachment; filename="`+YearlyFileName(y.Year())+`"`)
+		c.Data(http.StatusOK, xlsxContentType, buf.Bytes())
+		return
+	}
+
+	response.OK(c, http.StatusOK, "Rekap kehadiran tahunan", rpt)
+}
+
+// departmentQuery parses the optional department_id query parameter,
+// writing a 400 and returning ok=false when it is malformed.
+func departmentQuery(c *gin.Context) (id *uuid.UUID, ok bool) {
+	v := c.Query("department_id")
+	if v == "" {
+		return nil, true
+	}
+	parsed, err := uuid.Parse(v)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, "department_id tidak valid", nil)
+		return nil, false
+	}
+	return &parsed, true
+}
+
 func toData(r *Monthly) gin.H {
 	employees := make([]gin.H, 0, len(r.Employees))
 	for _, e := range r.Employees {
@@ -92,6 +139,9 @@ func toData(r *Monthly) gin.H {
 			"on_time":         e.OnTime,
 			"late_count":      e.LateCount,
 			"late_minutes":    e.LateMinutes,
+			"izin":            e.Izin,
+			"sakit":           e.Sakit,
+			"cuti":            e.Cuti,
 			"absent":          e.Absent,
 			"days":            days,
 		})

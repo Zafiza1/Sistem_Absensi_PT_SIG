@@ -57,6 +57,11 @@ func (s *Service) Monthly(ctx context.Context, year, month int, departmentID *uu
 	if err != nil {
 		return nil, err
 	}
+	leaves, err := s.repo.LeavesInRange(ctx, first, last, departmentID)
+	if err != nil {
+		return nil, err
+	}
+	leaveByEmpDay := leaveDaysInMonth(leaves, year, time.Month(month))
 
 	// (employee, day-of-month) -> attendance
 	attByEmpDay := make(map[uuid.UUID]map[int]AttendanceRow, len(employees))
@@ -91,6 +96,7 @@ func (s *Service) Monthly(ctx context.Context, year, month int, departmentID *uu
 
 			cell := DayCell{Day: day}
 			att, hasAtt := attByEmpDay[emp.ID][day]
+			leaveType, onLeave := leaveByEmpDay[emp.ID][day]
 
 			switch {
 			case hasAtt:
@@ -108,6 +114,20 @@ func (s *Service) Monthly(ctx context.Context, year, month int, departmentID *uu
 				}
 			case !working:
 				cell.Status = DayOff
+			case onLeave:
+				// Counted even when still ahead: HR recorded it, so it's
+				// no longer pending.
+				cell.Status = DayStatus(leaveType)
+				er.WorkingDays++
+				switch cell.Status {
+				case DayIzin:
+					er.Izin++
+				case DaySakit:
+					er.Sakit++
+				default:
+					cell.Status = DayCuti
+					er.Cuti++
+				}
 			case !d.Before(today):
 				cell.Status = DayPending
 			default:
@@ -123,6 +143,33 @@ func (s *Service) Monthly(ctx context.Context, year, month int, departmentID *uu
 	}
 
 	return report, nil
+}
+
+// leaveDaysInMonth expands each leave period into the days of the given
+// month it covers: employee -> day-of-month -> leave type. Leaves are
+// prevented from overlapping by internal/leave, so each day has at most one.
+func leaveDaysInMonth(leaves []LeaveRow, year int, month time.Month) map[uuid.UUID]map[int]string {
+	first := time.Date(year, month, 1, 0, 0, 0, 0, time.UTC)
+	last := first.AddDate(0, 1, -1)
+
+	out := map[uuid.UUID]map[int]string{}
+	for _, l := range leaves {
+		start := time.Date(l.StartDate.Year(), l.StartDate.Month(), l.StartDate.Day(), 0, 0, 0, 0, time.UTC)
+		end := time.Date(l.EndDate.Year(), l.EndDate.Month(), l.EndDate.Day(), 0, 0, 0, 0, time.UTC)
+		if start.Before(first) {
+			start = first
+		}
+		if end.After(last) {
+			end = last
+		}
+		for d := start; !d.After(end); d = d.AddDate(0, 0, 1) {
+			if out[l.EmployeeID] == nil {
+				out[l.EmployeeID] = map[int]string{}
+			}
+			out[l.EmployeeID][d.Day()] = l.Type
+		}
+	}
+	return out
 }
 
 // isWorkingDay mirrors attendance.resolveShift's three layers, reduced to

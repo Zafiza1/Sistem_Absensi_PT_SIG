@@ -292,7 +292,9 @@ function PayrollItemsPageContent() {
               <TableHead>Jabatan</TableHead>
               <TableHead className="text-right">Hari Kerja</TableHead>
               <TableHead className="text-right">Terlambat</TableHead>
-              <TableHead className="text-right">Absen</TableHead>
+              <TableHead className="text-right" title="Izin + Sakit + Tidak Hadir (alpha), dipotong 1 hari gaji per hari">
+                Tidak Masuk
+              </TableHead>
               <TableHead className="text-right">Gaji Pokok</TableHead>
               <TableHead className="text-right">Pendapatan</TableHead>
               <TableHead className="text-right">Potongan</TableHead>
@@ -333,7 +335,10 @@ function PayrollItemsPageContent() {
               filteredItems.map((item) => (
                 <TableRow key={item.id}>
                   <TableCell className="font-mono text-sm">{item.employee_number}</TableCell>
-                  <TableCell className="font-medium">{item.employee_name}</TableCell>
+                  <TableCell>
+                    <p className="font-medium">{item.employee_name}</p>
+                    {item.notes && <p className="text-xs text-muted-foreground">{item.notes}</p>}
+                  </TableCell>
                   <TableCell className="text-muted-foreground">{item.department_name}</TableCell>
                   <TableCell className="text-muted-foreground">{item.position_name}</TableCell>
                   <TableCell className="text-right">{item.working_days}</TableCell>
